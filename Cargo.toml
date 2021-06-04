@@ -4,15 +4,14 @@ version = "0.0.0"
 license = "MIT"
 authors = ["ibraheem <ibrah1440@gmail.com>"]
 edition = "2018"
-description = "A powerful web framework that does the heavy lifting for you."
+description = "A powerful web-application framework that does the heavy lifting for you."
+repository = "https://github.com/ibraheemdev/bison"
 readme = "README.md"
 
 [dependencies]
 bison-core = { path = "./bison-core" }
-bison-http = { path = "./bison-http" }
 
 [workspace]
 members = [
-    "bison-core",
-    "bison-http"
+    "bison-core"
 ]

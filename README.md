@@ -1,1 +1,1 @@
-An experimental web framework.
+Work in progress.

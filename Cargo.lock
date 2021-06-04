@@ -5,16 +5,8 @@ name = "bison"
 version = "0.0.0"
 dependencies = [
  "bison-core",
- "bison-http",
 ]
 
 [[package]]
 name = "bison-core"
-version = "0.0.0"
-dependencies = [
- "bison-http",
-]
-
-[[package]]
-name = "bison-http"
-version = "0.0.0"
+version = "0.1.0"
