@@ -9,9 +9,18 @@ repository = "https://github.com/ibraheemdev/bison"
 readme = "README.md"
 
 [dependencies]
-bison-core = { path = "./bison-core" }
+bytes = "1.0.1"
+http = "0.2.4"
+futures-util = { version = "0.3.16", default-features = false }
+matchit = "0.4.2"
+
+[features]
+default = []
+not-send = []
 
 [workspace]
 members = [
-    "bison-core"
+    "bison-codegen",
+    "bison-hyper",
+    "bison-actix"
 ]

@@ -1,0 +1,85 @@
+use crate::send::{BoxError, BoxStream, SendBound};
+use crate::State;
+
+use std::error::Error as StdError;
+use std::fmt;
+use std::mem;
+use std::pin::Pin;
+use std::task::{Context, Poll};
+
+use bytes::Bytes;
+use futures_util::stream::{Stream, TryStreamExt};
+pub use http::{header, request, HeaderValue, Method, StatusCode};
+
+pub struct Request<'r> {
+    inner: http::Request<Body>,
+    state: &'r State,
+}
+
+pub type Response = http::Response<Body>;
+pub type ResponseBuilder = http::Response<()>;
+
+/// Respresents the body of an HTTP message.
+#[non_exhaustive]
+pub enum Body {
+    Stream(BoxStream<'static, Result<Bytes, BoxError>>),
+    Once(Bytes),
+    Empty,
+}
+
+impl Body {
+    /// Create a `Body` from a stream of bytes.
+    pub fn stream<S, E>(stream: S) -> Self
+    where
+        S: Stream<Item = Result<Bytes, E>> + SendBound + 'static,
+        E: StdError + SendBound + 'static,
+    {
+        Self::Stream(Box::pin(stream.map_err(|e| Box::new(e) as _)))
+    }
+
+    /// Create a body directly from bytes.
+    pub fn once(bytes: Bytes) -> Self {
+        Self::Once(bytes)
+    }
+
+    /// Create an empty `Body`.
+    pub fn empty() -> Self {
+        Self::Empty
+    }
+}
+
+impl Default for Body {
+    fn default() -> Self {
+        Self::empty()
+    }
+}
+
+impl fmt::Debug for Body {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Body").finish()
+    }
+}
+
+impl Stream for Body {
+    type Item = Result<Bytes, BoxError>;
+
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        match &mut *self {
+            Self::Stream(stream) => stream.as_mut().poll_next(cx),
+            Self::Once(bytes) => {
+                let bytes = mem::take(bytes);
+                *self = Self::Empty;
+                Some(Ok(bytes)).into()
+            }
+            Self::Empty => None.into(),
+        }
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        match &*self {
+            Self::Stream(stream) => stream.size_hint(),
+            Self::Once(bytes) => (bytes.len(), Some(bytes.len())),
+            Self::Empty => (0, Some(0)),
+        }
+    }
+}
