@@ -193,6 +193,7 @@ dependencies = [
  "actix-service",
  "bison",
  "futures-core",
+ "http",
 ]
 
 [[package]]

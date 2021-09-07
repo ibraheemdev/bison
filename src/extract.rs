@@ -1,4 +1,4 @@
-use crate::{Error, HasContext};
+use crate::{bison::State, Error, HasContext};
 
 use std::future::Future;
 
@@ -48,7 +48,7 @@ use std::future::Future;
 ///     }
 /// }
 /// ```
-pub trait Extract: HasContext {
+pub trait Extract<S: State>: HasContext<S> {
     /// The type that is being extracted.
     type Output;
 

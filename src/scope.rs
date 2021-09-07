@@ -1,15 +1,26 @@
+use crate::bison::State;
 use crate::endpoint::WithContext;
 use crate::http::{Method, Request};
 use crate::wrap::{Call, Wrap};
 use crate::{Bison, Endpoint, Error, HasContext};
 
-pub struct Scope<W> {
+pub struct Scope<W, S>
+where
+    S: State,
+{
     wrap: W,
     prefix: String,
-    routes: Vec<(Method, String, Box<dyn Endpoint<Request, Error = Error>>)>,
+    routes: Vec<(
+        Method,
+        String,
+        Box<dyn Endpoint<Request<S>, S, Error = Error>>,
+    )>,
 }
 
-impl Scope<Call> {
+impl<S> Scope<Call, S>
+where
+    S: State,
+{
     pub fn new(prefix: impl Into<String>) -> Self {
         let mut prefix = prefix.into();
         if !prefix.starts_with('/') {
@@ -24,13 +35,14 @@ impl Scope<Call> {
     }
 }
 
-impl<W> Scope<W>
+impl<W, S> Scope<W, S>
 where
-    W: Wrap + Clone + 'static,
+    S: State,
+    W: Wrap<S> + Clone + 'static,
 {
-    pub(crate) fn register<M>(self, mut bison: Bison<M>) -> Bison<M>
+    pub(crate) fn register<M>(self, mut bison: Bison<M, S>) -> Bison<M, S>
     where
-        M: Wrap,
+        M: Wrap<S>,
     {
         for (method, path, endpoint) in self.routes {
             bison = bison.route(
@@ -42,9 +54,9 @@ where
         bison
     }
 
-    pub fn wrap<O>(self, wrap: O) -> Scope<impl Wrap>
+    pub fn wrap<O>(self, wrap: O) -> Scope<impl Wrap<S>, S>
     where
-        O: Wrap,
+        O: Wrap<S>,
     {
         Scope {
             wrap: self.wrap.and(wrap),
@@ -60,8 +72,8 @@ macro_rules! insert_route {
         pub fn $name<P, E, C>(&mut self, path: P, endpoint: E) -> &mut Self
         where
             P: Into<String>,
-            E: Endpoint<C> + 'static,
-            C: HasContext + 'static,
+            E: Endpoint<C, S> + 'static,
+            C: HasContext<S> + 'static,
         {
             self.routes.push((
                 Method::$method,
@@ -73,9 +85,10 @@ macro_rules! insert_route {
     };
 }
 
-impl<W> Scope<W>
+impl<W, S> Scope<W, S>
 where
-    W: Wrap + Clone + 'static,
+    S: State,
+    W: Wrap<S> + Clone + 'static,
 {
     insert_route!(get => Method::GET);
     insert_route!(put => Method::PUT);

@@ -11,10 +11,10 @@ async fn main() -> io::Result<()> {
     Server::build()
         .bind("hello-world", "127.0.0.1:3000", || {
             let bison = Bison::new()
-                .get("/hello", |_: Request| async move {
+                .get("/hello", |_: Request<()>| async move {
                     Ok::<_, Infallible>(Response::new(Body::once(Bytes::from("Hello world!"))))
                 })
-                .post("/:id", |_: Request| async move {
+                .post("/:id", |_: Request<()>| async move {
                     Ok::<_, Infallible>(Response::new(Body::once(Bytes::from("Hello world!"))))
                 });
 

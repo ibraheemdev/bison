@@ -9,11 +9,11 @@ use actix_service::{Service, ServiceFactory};
 use bison::Bison;
 use futures_core::Stream;
 
-pub struct BisonService<W> {
-    bison: Rc<Bison<W>>,
+pub struct BisonService<W, S> {
+    bison: Rc<Bison<W, S>>,
 }
 
-pub fn to_bison_request(actix_req: actix_http::Request) -> bison::Request {
+pub fn to_bison_request(actix_req: actix_http::Request) -> http::Request<bison::Body> {
     let (mut actix_head, actix_payload) = actix_req.into_parts();
     let actix_head = std::mem::take(&mut *actix_head);
     let mut bison_req = bison::http::request::Builder::new()
@@ -36,9 +36,10 @@ pub fn to_actix_response(bison_resp: bison::Response) -> actix_http::Response<Bi
     actix_resp
 }
 
-impl<W> Service<actix_http::Request> for BisonService<W>
+impl<W, S> Service<actix_http::Request> for BisonService<W, S>
 where
-    W: bison::Wrap + 'static,
+    S: bison::State,
+    W: bison::Wrap<S> + 'static,
 {
     type Response = actix_http::Response<BisonMessageBody>;
     type Error = actix_http::Error;
@@ -58,12 +59,12 @@ where
     }
 }
 
-pub struct BisonServiceFactory<W> {
-    service: RefCell<Option<BisonService<W>>>,
+pub struct BisonServiceFactory<W, S> {
+    service: RefCell<Option<BisonService<W, S>>>,
 }
 
-impl<W> BisonServiceFactory<W> {
-    pub fn new(bison: Bison<W>) -> Self {
+impl<W, S> BisonServiceFactory<W, S> {
+    pub fn new(bison: Bison<W, S>) -> Self {
         Self {
             service: RefCell::new(Some(BisonService {
                 bison: Rc::new(bison),
@@ -96,14 +97,15 @@ impl actix_http::body::MessageBody for BisonMessageBody {
     }
 }
 
-impl<W> ServiceFactory<actix_http::Request> for BisonServiceFactory<W>
+impl<W, S> ServiceFactory<actix_http::Request> for BisonServiceFactory<W, S>
 where
-    W: bison::Wrap + 'static,
+    S: bison::State,
+    W: bison::Wrap<S> + 'static,
 {
     type Response = actix_http::Response<BisonMessageBody>;
     type Error = actix_http::Error;
     type Config = ();
-    type Service = BisonService<W>;
+    type Service = BisonService<W, S>;
     type InitError = ();
     type Future = Ready<Result<Self::Service, ()>>;
 

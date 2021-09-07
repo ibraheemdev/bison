@@ -1,19 +1,50 @@
+use crate::bison::State;
 use crate::send::{BoxError, BoxStream, SendBound};
-use crate::State;
 
 use std::error::Error as StdError;
 use std::fmt;
 use std::mem;
 use std::pin::Pin;
+use std::sync::Arc;
 use std::task::{Context, Poll};
 
 use bytes::Bytes;
 use futures_util::stream::{Stream, TryStreamExt};
 pub use http::{header, request, HeaderValue, Method, StatusCode};
 
-pub struct Request<'r> {
-    inner: http::Request<Body>,
-    state: &'r State,
+pub struct Request<S> {
+    pub inner: http::Request<Body>,
+    pub state: Arc<S>,
+}
+
+impl<S> Request<S>
+where
+    S: State,
+{
+    pub fn state(&self) -> &S {
+        &self.state
+    }
+}
+
+impl<S> std::ops::Deref for Request<S>
+where
+    S: State,
+{
+    // TODO: inherent methods
+    type Target = http::Request<Body>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
+}
+
+impl<S> std::ops::DerefMut for Request<S>
+where
+    S: State,
+{
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.inner
+    }
 }
 
 pub type Response = http::Response<Body>;

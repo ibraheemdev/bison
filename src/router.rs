@@ -1,3 +1,4 @@
+use crate::bison::State;
 use crate::endpoint::Endpoint;
 use crate::http::{header, Method, Request, Response, ResponseBuilder, StatusCode};
 use crate::wrap::{self, Wrap};
@@ -7,12 +8,15 @@ use std::collections::HashMap;
 
 use matchit::Node;
 
-pub(crate) struct Router<W> {
+pub(crate) struct Router<W, S> {
     wrap: W,
-    routes: HashMap<Method, Node<Box<dyn Endpoint<Request, Error = Error>>>>,
+    routes: HashMap<Method, Node<Box<dyn Endpoint<Request<S>, S, Error = Error>>>>,
 }
 
-impl Router<wrap::Call> {
+impl<S> Router<wrap::Call, S>
+where
+    S: State,
+{
     pub(crate) fn new() -> Self {
         Self {
             wrap: wrap::Call::new(),
@@ -21,13 +25,14 @@ impl Router<wrap::Call> {
     }
 }
 
-impl<W> Router<W>
+impl<W, S> Router<W, S>
 where
-    W: Wrap,
+    W: Wrap<S>,
+    S: State,
 {
-    pub(crate) fn wrap<O>(self, wrap: O) -> Router<impl Wrap>
+    pub(crate) fn wrap<O>(self, wrap: O) -> Router<impl Wrap<S>, S>
     where
-        O: Wrap,
+        O: Wrap<S>,
     {
         Router {
             wrap: self.wrap.and(wrap),
@@ -43,7 +48,7 @@ where
     ) -> Result<Self, matchit::InsertError>
     where
         P: Into<String>,
-        E: Endpoint<Request, Error = Error> + 'static,
+        E: Endpoint<Request<S>, S, Error = Error> + 'static,
     {
         self.routes
             .entry(method)
@@ -86,7 +91,7 @@ where
         allowed
     }
 
-    pub(crate) async fn serve(&self, mut req: Request) -> Response {
+    pub(crate) async fn serve(&self, mut req: Request<S>) -> Response {
         let path = req.uri().path();
         match self.routes.get(req.method()) {
             Some(node) => match node.at(path) {

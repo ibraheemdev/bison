@@ -1,3 +1,4 @@
+use crate::bison::State;
 use crate::endpoint::{Endpoint, Ref};
 use crate::send::{BoxFuture, SendBound};
 use crate::{Error, Request, Response};
@@ -24,19 +25,22 @@ use crate::{Error, Request, Response};
 ///     }
 /// }
 /// ```
-pub trait Wrap: SendBound {
+pub trait Wrap<S>: SendBound
+where
+    S: State,
+{
     /// This is either a type implementing [`ResponseError`] or the boxed [`Error`]
     type Error: Into<Error>;
 
     fn wrap<'a>(
         &'a self,
-        req: Request,
-        next: impl Next + 'a,
+        req: Request<S>,
+        next: impl Next<S> + 'a,
     ) -> BoxFuture<'a, Result<Response, Self::Error>>;
 
     fn and<W>(self, other: W) -> And<Self, W>
     where
-        W: Wrap,
+        W: Wrap<S>,
         Self: Sized,
     {
         And {
@@ -46,24 +50,34 @@ pub trait Wrap: SendBound {
     }
 }
 
-impl<W> Wrap for &W
+impl<S, W> Wrap<S> for &W
 where
-    W: Wrap + SendBound,
+    S: State,
+    W: Wrap<S> + SendBound,
 {
     type Error = W::Error;
 
     fn wrap<'a>(
         &'a self,
-        req: Request,
-        next: impl Next + 'a,
+        req: Request<S>,
+        next: impl Next<S> + 'a,
     ) -> BoxFuture<'a, Result<Response, Self::Error>> {
         W::wrap(self, req, next)
     }
 }
 
-pub trait Next: Endpoint<Request, Error = Error> {}
+pub trait Next<S>: Endpoint<Request<S>, S, Error = Error>
+where
+    S: State,
+{
+}
 
-impl<E> Next for E where E: Endpoint<Request, Error = Error> {}
+impl<S, E> Next<S> for E
+where
+    E: Endpoint<Request<S>, S, Error = Error>,
+    S: State,
+{
+}
 
 #[derive(Clone)]
 pub struct And<I, O> {
@@ -71,17 +85,18 @@ pub struct And<I, O> {
     outer: O,
 }
 
-impl<I, O> Wrap for And<I, O>
+impl<S, I, O> Wrap<S> for And<I, O>
 where
-    I: Wrap,
-    O: Wrap,
+    S: State,
+    I: Wrap<S>,
+    O: Wrap<S>,
 {
     type Error = O::Error;
 
     fn wrap<'a>(
         &'a self,
-        req: Request,
-        next: impl Next + 'a,
+        req: Request<S>,
+        next: impl Next<S> + 'a,
     ) -> BoxFuture<'a, Result<Response, Self::Error>> {
         self.outer.wrap(
             req,
@@ -93,14 +108,15 @@ where
     }
 }
 
-impl<I, O> Endpoint<Request> for And<I, O>
+impl<S, I, O> Endpoint<Request<S>, S> for And<I, O>
 where
-    O: Wrap,
-    I: Next,
+    S: State,
+    O: Wrap<S>,
+    I: Next<S>,
 {
     type Error = Error;
 
-    fn serve(&self, req: Request) -> BoxFuture<'_, Result<Response, Error>> {
+    fn serve(&self, req: Request<S>) -> BoxFuture<'_, Result<Response, Error>> {
         Box::pin(async move {
             self.outer
                 .wrap(req, Ref::new(&self.inner))
@@ -123,13 +139,16 @@ impl Call {
     }
 }
 
-impl Wrap for Call {
+impl<S> Wrap<S> for Call
+where
+    S: State,
+{
     type Error = Error;
 
     fn wrap<'a>(
         &'a self,
-        req: Request,
-        next: impl Next + 'a,
+        req: Request<S>,
+        next: impl Next<S> + 'a,
     ) -> BoxFuture<'a, Result<Response, Error>> {
         // this boxing is unfortunate because N::Future is already going to be boxed
         // however I'm not sure it's worth moving the type N onto Wrap<N> for, because

@@ -11,11 +11,11 @@ use hyper::service::Service;
 
 pub use hyper::Server;
 
-pub struct BisonService<W> {
-    bison: Arc<Bison<W>>,
+pub struct BisonService<W, S> {
+    bison: Arc<Bison<W, S>>,
 }
 
-impl<W> Clone for BisonService<W> {
+impl<W, S> Clone for BisonService<W, S> {
     fn clone(&self) -> Self {
         Self {
             bison: self.bison.clone(),
@@ -52,9 +52,10 @@ impl http_body::Body for BisonHttpBody {
     }
 }
 
-impl<W> Service<hyper::Request<hyper::Body>> for BisonService<W>
+impl<W, S> Service<hyper::Request<hyper::Body>> for BisonService<W, S>
 where
-    W: bison::Wrap + Send + Sync,
+    S: bison::State,
+    W: bison::Wrap<S>,
 {
     type Response = hyper::Response<BisonHttpBody>;
     type Error = Infallible;
@@ -78,12 +79,12 @@ where
     }
 }
 
-pub struct BisonMakeService<W> {
-    service: BisonService<W>,
+pub struct BisonMakeService<W, S> {
+    service: BisonService<W, S>,
 }
 
-impl<W> BisonMakeService<W> {
-    pub fn new(bison: Bison<W>) -> Self {
+impl<W, S> BisonMakeService<W, S> {
+    pub fn new(bison: Bison<W, S>) -> Self {
         Self {
             service: BisonService {
                 bison: Arc::new(bison),
@@ -92,8 +93,8 @@ impl<W> BisonMakeService<W> {
     }
 }
 
-impl<T, W> Service<T> for BisonMakeService<W> {
-    type Response = BisonService<W>;
+impl<T, W, S> Service<T> for BisonMakeService<W, S> {
+    type Response = BisonService<W, S>;
     type Error = Infallible;
     type Future = Ready<Result<Self::Response, Infallible>>;
 

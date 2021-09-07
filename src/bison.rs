@@ -1,30 +1,48 @@
+use std::sync::Arc;
+
 use crate::endpoint::{Endpoint, WithContext};
 use crate::http::{Method, Request, Response};
 use crate::router::Router;
 use crate::wrap::{Call, Wrap};
-use crate::{HasContext, Scope, State};
+use crate::{Body, HasContext, Scope};
 
-pub struct Bison<W> {
-    router: Router<W>,
-    state: State,
+pub trait State: Send + Sync + 'static {}
+impl<S> State for S where S: Send + Sync + 'static {}
+
+pub struct Bison<W, S> {
+    router: Router<W, S>,
+    state: Arc<S>,
 }
 
-impl Bison<Call> {
-    pub fn new() -> Bison<impl Wrap> {
+impl Bison<Call, ()> {
+    pub fn new() -> Bison<impl Wrap<()>, ()> {
         Self {
             router: Router::new(),
-            state: State::new(),
+            state: Arc::new(()),
         }
     }
 }
 
-impl<W> Bison<W>
+impl<S> Bison<Call, S>
 where
-    W: Wrap,
+    S: State,
 {
-    pub fn wrap<O>(self, wrap: O) -> Bison<impl Wrap>
+    pub fn with_state(state: S) -> Bison<impl Wrap<()>, S> {
+        Bison {
+            router: Router::new(),
+            state: Arc::new(state),
+        }
+    }
+}
+
+impl<W, S> Bison<W, S>
+where
+    W: Wrap<S>,
+    S: State,
+{
+    pub fn wrap<O>(self, wrap: O) -> Bison<impl Wrap<S>, S>
     where
-        O: Wrap,
+        O: Wrap<S>,
     {
         Bison {
             router: self.router.wrap(wrap),
@@ -35,8 +53,8 @@ where
     pub fn route<E, P, C>(self, method: Method, path: P, endpoint: E) -> Self
     where
         P: Into<String>,
-        E: Endpoint<C> + 'static,
-        C: HasContext + 'static,
+        E: Endpoint<C, S> + 'static,
+        C: HasContext<S> + 'static,
     {
         Bison {
             state: self.state,
@@ -47,22 +65,18 @@ where
         }
     }
 
-    pub fn state<T>(mut self, state: T) -> Self
-    where
-        T: Send + Sync + 'static,
-    {
-        self.state.insert(state);
-        self
-    }
+    pub async fn serve(&self, request: http::Request<Body>) -> Response {
+        let request = Request {
+            inner: request,
+            state: self.state.clone(),
+        };
 
-    pub async fn serve(&self, mut request: Request) -> Response {
-        request.extensions_mut().insert::<State>(self.state.clone());
         self.router.serve(request).await
     }
 
-    pub fn scope<S>(self, scope: Scope<S>) -> Self
+    pub fn scope<M>(self, scope: Scope<M, S>) -> Self
     where
-        S: Wrap + Clone + 'static,
+        M: Wrap<S> + Clone + 'static,
     {
         scope.register(self)
     }
@@ -74,17 +88,18 @@ macro_rules! insert_route {
         pub fn $name<P, E, C>(self, path: P, endpoint: E) -> Self
         where
             P: Into<String>,
-            E: Endpoint<C> + 'static,
-            C: HasContext + 'static,
+            E: Endpoint<C, S> + 'static,
+            C: HasContext<S> + 'static,
         {
             self.route(Method::$method, path, endpoint)
         }
     };
 }
 
-impl<W> Bison<W>
+impl<W, S> Bison<W, S>
 where
-    W: Wrap,
+    W: Wrap<S>,
+    S: Send + Sync + 'static,
 {
     insert_route!(get => Method::GET);
     insert_route!(put => Method::PUT);

@@ -1,3 +1,4 @@
+use crate::bison::State;
 use crate::send::{BoxFuture, Boxed, SendBound};
 use crate::wrap::Wrap;
 use crate::{Error, HasContext, Request, Response, ResponseError};
@@ -5,9 +6,10 @@ use crate::{Error, HasContext, Request, Response, ResponseError};
 use std::future::Future;
 use std::marker::PhantomData;
 
-pub trait Endpoint<C>: SendBound
+pub trait Endpoint<C, S>: SendBound
 where
-    C: HasContext,
+    S: State,
+    C: HasContext<S>,
 {
     /// An error that can occur during extraction.
     ///
@@ -16,19 +18,20 @@ where
 
     fn serve(&self, context: C) -> BoxFuture<'_, Result<Response, Self::Error>>;
 
-    fn wrap<W>(self, wrap: W) -> Wrapped<Self, C, W>
+    fn wrap<W>(self, wrap: W) -> Wrapped<Self, C, W, S>
     where
-        W: Wrap,
+        W: Wrap<S>,
         Self: Sized,
     {
         Wrapped::new(self, wrap)
     }
 }
 
-impl<H, C, F, E> Endpoint<C> for H
+impl<H, S, C, F, E> Endpoint<C, S> for H
 where
+    S: State,
     H: Fn(C) -> F + SendBound,
-    C: HasContext,
+    C: HasContext<S>,
     F: Future<Output = Result<Response, E>> + SendBound + 'static,
     E: ResponseError,
 {
@@ -39,9 +42,10 @@ where
     }
 }
 
-impl<C, E> Endpoint<C> for Box<dyn Endpoint<C, Error = E>>
+impl<S, C, E> Endpoint<C, S> for Box<dyn Endpoint<C, S, Error = E>>
 where
-    C: HasContext + 'static,
+    S: State,
+    C: HasContext<S> + 'static,
     E: Into<Error> + 'static,
 {
     type Error = E;
@@ -61,10 +65,11 @@ impl<'a, E> Ref<'a, E> {
     }
 }
 
-impl<C, E> Endpoint<C> for Ref<'_, E>
+impl<S, C, E> Endpoint<C, S> for Ref<'_, E>
 where
-    E: Endpoint<C>,
-    C: HasContext,
+    S: State,
+    E: Endpoint<C, S>,
+    C: HasContext<S>,
 {
     type Error = E::Error;
 
@@ -74,15 +79,16 @@ where
 }
 
 /// An endpoint with context.
-pub(crate) struct WithContext<E, C> {
+pub(crate) struct WithContext<E, C, S> {
     endpoint: E,
-    _ctx: PhantomData<C>,
+    _ctx: PhantomData<(C, S)>,
 }
 
-impl<E, C> WithContext<E, C>
+impl<S, E, C> WithContext<E, C, S>
 where
-    E: Endpoint<C>,
-    C: HasContext,
+    S: State,
+    E: Endpoint<C, S>,
+    C: HasContext<S>,
 {
     pub(crate) fn new(endpoint: E) -> Self {
         Self {
@@ -92,14 +98,15 @@ where
     }
 }
 
-impl<E, C> Endpoint<Request> for WithContext<E, C>
+impl<S, E, C> Endpoint<Request<S>, S> for WithContext<E, C, S>
 where
-    E: Endpoint<C> + SendBound,
-    C: HasContext + SendBound,
+    S: State,
+    E: Endpoint<C, S> + SendBound,
+    C: HasContext<S> + SendBound,
 {
     type Error = Error;
 
-    fn serve(&self, req: Request) -> BoxFuture<'_, Result<Response, Error>> {
+    fn serve(&self, req: Request<S>) -> BoxFuture<'_, Result<Response, Error>> {
         Box::pin(async move {
             let ctx = C::construct(req).await.map_err(Error::new)?;
             let call = self.endpoint.serve(ctx);
@@ -109,15 +116,16 @@ where
 }
 
 /// A handler wrapped with middleware.
-pub struct Wrapped<E, C, W> {
+pub struct Wrapped<E, C, W, S> {
     wrap: W,
-    endpoint: WithContext<E, C>,
+    endpoint: WithContext<E, C, S>,
 }
 
-impl<E, C, W> Wrapped<E, C, W>
+impl<S, E, C, W> Wrapped<E, C, W, S>
 where
-    E: Endpoint<C>,
-    C: HasContext,
+    S: State,
+    E: Endpoint<C, S>,
+    C: HasContext<S>,
 {
     pub(crate) fn new(endpoint: E, wrap: W) -> Self {
         Self {
@@ -127,15 +135,16 @@ where
     }
 }
 
-impl<E, C, W> Endpoint<Request> for Wrapped<E, C, W>
+impl<S, E, C, W> Endpoint<Request<S>, S> for Wrapped<E, C, W, S>
 where
-    W: Wrap + 'static,
-    E: Endpoint<C>,
-    C: HasContext,
+    S: State,
+    W: Wrap<S> + 'static,
+    E: Endpoint<C, S>,
+    C: HasContext<S>,
 {
     type Error = Error;
 
-    fn serve(&self, req: Request) -> BoxFuture<'_, Result<Response, Error>> {
+    fn serve(&self, req: Request<S>) -> BoxFuture<'_, Result<Response, Error>> {
         Box::pin(async move {
             self.wrap
                 .wrap(req, Ref::new(&self.endpoint))
