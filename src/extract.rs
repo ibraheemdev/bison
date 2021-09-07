@@ -29,7 +29,7 @@ use std::future::Future;
 /// }
 /// ```
 ///
-/// Extractors can be to derive extra context from a request:
+/// Extractors can be used to derive extra context from a request:
 /// ```rust
 /// #[derive(HasContext)]
 /// struct ResetPassword {

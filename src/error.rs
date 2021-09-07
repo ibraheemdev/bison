@@ -1,5 +1,6 @@
-use crate::Response;
+use crate::http::{Response, ResponseBuilder};
 
+use core::fmt;
 use std::convert::Infallible;
 use std::fmt::Debug;
 
@@ -46,9 +47,14 @@ impl ResponseError for Box<dyn ResponseError> {
     }
 }
 
-#[derive(Debug)]
 pub struct Error {
     inner: Box<dyn ResponseError>,
+}
+
+impl fmt::Debug for Error {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?}", self.inner)
+    }
 }
 
 impl Error {
@@ -67,18 +73,7 @@ impl Error {
     }
 }
 
-impl<E> From<E> for Error
-where
-    E: ResponseError,
-{
-    fn from(err: E) -> Self {
-        Self {
-            inner: Box::new(err),
-        }
-    }
-}
-
-// We can't implement From<E> for Error and ResponseError for Error, but we still want users to be
+// We can't implement From<E> *for* Error and ResponseError for Error, but we still want users to be
 // able to return the boxed Error from endpoints, and use the ? operator to propagate reponse
 // errors. To accomplish this we have:
 // ```rust
@@ -91,3 +86,35 @@ where
 //
 // And we lose the `impl ResponseError for Error`, which isn't that big of a deal because the inner
 // error is still exposed.
+impl<E> From<E> for Error
+where
+    E: ResponseError,
+{
+    fn from(err: E) -> Self {
+        Self {
+            inner: Box::new(err),
+        }
+    }
+}
+
+pub struct ParamNotFound {
+    _priv: (),
+}
+
+impl ParamNotFound {
+    pub fn new() -> Self {
+        Self { _priv: () }
+    }
+}
+
+impl fmt::Debug for ParamNotFound {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_tuple("ParamNotFound").finish()
+    }
+}
+
+impl ResponseError for ParamNotFound {
+    fn respond(&mut self) -> Response {
+        Response::not_found()
+    }
+}

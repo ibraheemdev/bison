@@ -102,10 +102,14 @@ where
                         .iter()
                         .map(|(k, v)| (k.to_owned(), v.to_owned()))
                         .collect::<Vec<_>>();
-                    req.extensions_mut().insert(Params(params));
+                    req.params = params;
                     match endpoint.serve(req).await {
                         Ok(ok) => ok,
-                        Err(err) => err.into_response_error().respond(),
+                        Err(err) => {
+                            // TODO: error logging middleware
+                            dbg!(&err);
+                            err.into_response_error().respond()
+                        }
                     }
                 }
                 Err(e) if e.tsr() && req.method() != Method::CONNECT && path != "/" => {
@@ -114,13 +118,13 @@ where
                     } else {
                         format!("{}/", path)
                     };
-                    ResponseBuilder::builder()
+                    Response::builder()
                         .header(header::LOCATION, path)
                         .status(StatusCode::PERMANENT_REDIRECT)
                         .body(Body::empty())
                         .unwrap()
                 }
-                Err(_) => ResponseBuilder::builder()
+                Err(_) => Response::builder()
                     .status(StatusCode::NOT_FOUND)
                     .body(Body::empty())
                     .unwrap(),
@@ -128,13 +132,13 @@ where
             None => {
                 let allowed = self.allowed_methods(path);
                 if !allowed.is_empty() {
-                    ResponseBuilder::builder()
+                    Response::builder()
                         .header(header::ALLOW, allowed.join(", "))
                         .status(StatusCode::METHOD_NOT_ALLOWED)
                         .body(Body::empty())
                         .unwrap()
                 } else {
-                    ResponseBuilder::builder()
+                    Response::builder()
                         .status(StatusCode::NOT_FOUND)
                         .body(Body::empty())
                         .unwrap()
@@ -143,6 +147,3 @@ where
         }
     }
 }
-
-// Route parameters, stored in request extensions
-pub(crate) struct Params(Vec<(String, String)>);

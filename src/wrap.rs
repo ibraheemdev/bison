@@ -53,7 +53,7 @@ where
 impl<S, W> Wrap<S> for &W
 where
     S: State,
-    W: Wrap<S> + SendBound,
+    W: Wrap<S>,
 {
     type Error = W::Error;
 

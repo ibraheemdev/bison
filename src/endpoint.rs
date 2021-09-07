@@ -1,7 +1,8 @@
 use crate::bison::State;
+use crate::http::IntoResponse;
 use crate::send::{BoxFuture, Boxed, SendBound};
 use crate::wrap::Wrap;
-use crate::{Error, HasContext, Request, Response, ResponseError};
+use crate::{Error, HasContext, Request, Response};
 
 use std::future::Future;
 use std::marker::PhantomData;
@@ -27,18 +28,19 @@ where
     }
 }
 
-impl<H, S, C, F, E> Endpoint<C, S> for H
+impl<H, S, C, F, R> Endpoint<C, S> for H
 where
     S: State,
     H: Fn(C) -> F + SendBound,
     C: HasContext<S>,
-    F: Future<Output = Result<Response, E>> + SendBound + 'static,
-    E: ResponseError,
+    F: Future<Output = R> + SendBound + 'static,
+    R: IntoResponse,
 {
-    type Error = E;
+    type Error = Error;
 
     fn serve(&self, context: C) -> BoxFuture<'_, Result<Response, Self::Error>> {
-        self(context).boxed()
+        let fut = self(context);
+        async move { fut.await.into_response() }.boxed()
     }
 }
 
@@ -108,7 +110,7 @@ where
 
     fn serve(&self, req: Request<S>) -> BoxFuture<'_, Result<Response, Error>> {
         Box::pin(async move {
-            let ctx = C::construct(req).await.map_err(Error::new)?;
+            let ctx = C::extract(req).await.map_err(Into::into)?;
             let call = self.endpoint.serve(ctx);
             call.await.map_err(Into::into)
         })

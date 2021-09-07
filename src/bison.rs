@@ -1,24 +1,22 @@
-use std::sync::Arc;
-
 use crate::endpoint::{Endpoint, WithContext};
 use crate::http::{Method, Request, Response};
 use crate::router::Router;
 use crate::wrap::{Call, Wrap};
 use crate::{Body, HasContext, Scope};
 
-pub trait State: Send + Sync + 'static {}
-impl<S> State for S where S: Send + Sync + 'static {}
+pub trait State: Send + Sync + Clone + 'static {}
+impl<S> State for S where S: Send + Sync + Clone + 'static {}
 
 pub struct Bison<W, S> {
     router: Router<W, S>,
-    state: Arc<S>,
+    state: S,
 }
 
 impl Bison<Call, ()> {
     pub fn new() -> Bison<impl Wrap<()>, ()> {
         Self {
             router: Router::new(),
-            state: Arc::new(()),
+            state: (),
         }
     }
 }
@@ -27,10 +25,10 @@ impl<S> Bison<Call, S>
 where
     S: State,
 {
-    pub fn with_state(state: S) -> Bison<impl Wrap<()>, S> {
+    pub fn with_state(state: S) -> Bison<impl Wrap<S>, S> {
         Bison {
             router: Router::new(),
-            state: Arc::new(state),
+            state: state.into(),
         }
     }
 }
@@ -67,6 +65,7 @@ where
 
     pub async fn serve(&self, request: http::Request<Body>) -> Response {
         let request = Request {
+            params: Vec::new(),
             inner: request,
             state: self.state.clone(),
         };
@@ -99,7 +98,7 @@ macro_rules! insert_route {
 impl<W, S> Bison<W, S>
 where
     W: Wrap<S>,
-    S: Send + Sync + 'static,
+    S: State,
 {
     insert_route!(get => Method::GET);
     insert_route!(put => Method::PUT);

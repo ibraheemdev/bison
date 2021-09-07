@@ -13,6 +13,7 @@ bytes = "1.0.1"
 http = "0.2.4"
 futures-util = { version = "0.3.16", default-features = false }
 matchit = "0.4.2"
+bison-codegen = { path = "./bison-codegen" }
 
 [features]
 default = []
