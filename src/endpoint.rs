@@ -1,4 +1,5 @@
 use crate::bison::State;
+use crate::error::IntoResponseError;
 use crate::http::IntoResponse;
 use crate::send::{BoxFuture, Boxed, SendBound};
 use crate::wrap::Wrap;
@@ -13,9 +14,7 @@ where
     C: HasContext<S>,
 {
     /// An error that can occur during extraction.
-    ///
-    /// This is either a type implementing [`ResponseError`] or a boxed [`Error`].
-    type Error: Into<Error>;
+    type Error: IntoResponseError;
 
     fn serve(&self, context: C) -> BoxFuture<'_, Result<Response, Self::Error>>;
 
@@ -48,7 +47,7 @@ impl<S, C, E> Endpoint<C, S> for Box<dyn Endpoint<C, S, Error = E>>
 where
     S: State,
     C: HasContext<S> + 'static,
-    E: Into<Error> + 'static,
+    E: IntoResponseError + 'static,
 {
     type Error = E;
 
@@ -110,9 +109,11 @@ where
 
     fn serve(&self, req: Request<S>) -> BoxFuture<'_, Result<Response, Error>> {
         Box::pin(async move {
-            let ctx = C::extract(req).await.map_err(Into::into)?;
+            let ctx = C::extract(req)
+                .await
+                .map_err(IntoResponseError::into_response_error)?;
             let call = self.endpoint.serve(ctx);
-            call.await.map_err(Into::into)
+            call.await.map_err(IntoResponseError::into_response_error)
         })
     }
 }

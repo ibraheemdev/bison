@@ -35,7 +35,7 @@ where
     fn wrap<'a>(
         &'a self,
         req: Request<S>,
-        next: impl Next<S> + 'a,
+        next: impl Next<'a, S>,
     ) -> BoxFuture<'a, Result<Response, Self::Error>>;
 
     fn and<W>(self, other: W) -> And<Self, W>
@@ -60,23 +60,27 @@ where
     fn wrap<'a>(
         &'a self,
         req: Request<S>,
-        next: impl Next<S> + 'a,
+        next: impl Next<'a, S>,
     ) -> BoxFuture<'a, Result<Response, Self::Error>> {
         W::wrap(self, req, next)
     }
 }
 
-pub trait Next<S>: Endpoint<Request<S>, S, Error = Error>
+pub trait Next<'a, S>
 where
     S: State,
 {
+    fn call(self, req: Request<S>) -> BoxFuture<'a, Result<Response, Error>>;
 }
 
-impl<S, E> Next<S> for E
+impl<'a, S, E> Next<'a, S> for Ref<'a, E>
 where
     E: Endpoint<Request<S>, S, Error = Error>,
     S: State,
 {
+    fn call(self, req: Request<S>) -> BoxFuture<'a, Result<Response, Error>> {
+        self.serve(req)
+    }
 }
 
 #[derive(Clone)]
@@ -96,7 +100,7 @@ where
     fn wrap<'a>(
         &'a self,
         req: Request<S>,
-        next: impl Next<S> + 'a,
+        next: impl Next<'a, S>,
     ) -> BoxFuture<'a, Result<Response, Self::Error>> {
         self.outer.wrap(
             req,
@@ -108,11 +112,11 @@ where
     }
 }
 
-impl<S, I, O> Endpoint<Request<S>, S> for And<I, O>
+impl<'a, S, I, O> Endpoint<Request<S>, S> for And<I, O>
 where
     S: State,
     O: Wrap<S>,
-    I: Next<S>,
+    I: Next<'a, S>,
 {
     type Error = Error;
 
@@ -148,7 +152,7 @@ where
     fn wrap<'a>(
         &'a self,
         req: Request<S>,
-        next: impl Next<S> + 'a,
+        next: impl Next<'a, S>,
     ) -> BoxFuture<'a, Result<Response, Error>> {
         // this boxing is unfortunate because N::Future is already going to be boxed
         // however I'm not sure it's worth moving the type N onto Wrap<N> for, because

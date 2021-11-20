@@ -78,7 +78,7 @@ impl Error {
 // errors. To accomplish this we have:
 // ```rust
 // trait Endpoint/Wrap/Other {
-//     type Error: Into<Error>;
+//     type Error: IntoResponseError;
 // }
 //
 // impl<E: ResponseError> From<E> for Error { ... }
@@ -94,6 +94,25 @@ where
         Self {
             inner: Box::new(err),
         }
+    }
+}
+
+pub trait IntoResponseError: Debug {
+    fn into_response_error(self) -> Error;
+}
+
+impl<E> IntoResponseError for E
+where
+    E: ResponseError + Debug,
+{
+    fn into_response_error(self) -> Error {
+        self.into()
+    }
+}
+
+impl IntoResponseError for Error {
+    fn into_response_error(self) -> Error {
+        self
     }
 }
 

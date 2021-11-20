@@ -1,8 +1,9 @@
 use crate::bison::State;
-use crate::endpoint::WithContext;
+use crate::endpoint::{Endpoint, WithContext};
 use crate::http::{Method, Request};
-use crate::wrap::{Call, Wrap};
-use crate::{Bison, Endpoint, Error, HasContext};
+use crate::send::BoxFuture;
+use crate::wrap::{Call, Next, Wrap};
+use crate::{Bison, Error, HasContext, Response};
 
 pub struct Scope<W, S>
 where
@@ -96,4 +97,29 @@ where
     insert_route!(delete => Method::DELETE);
     insert_route!(head => Method::HEAD);
     insert_route!(options => Method::OPTIONS);
+}
+
+struct ScopedWrap<W> {
+    wrap: W,
+    prefix: String,
+}
+
+impl<S, W> Wrap<S> for ScopedWrap<W>
+where
+    S: State,
+    W: Wrap<S>,
+{
+    type Error = Error;
+
+    fn wrap<'a>(
+        &'a self,
+        req: Request<S>,
+        next: impl Next<'a, S>,
+    ) -> BoxFuture<'a, Result<Response, Self::Error>> {
+        if req.uri().path().starts_with(&self.prefix) {
+            Box::pin(async move { self.wrap.wrap(req, next).await.map_err(Into::into) })
+        } else {
+            Box::pin(next.serve(req))
+        }
+    }
 }

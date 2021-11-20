@@ -23,5 +23,6 @@ not-send = []
 members = [
     "bison-codegen",
     "bison-hyper",
-    "bison-actix"
+    "bison-actix",
+    "tester"
 ]

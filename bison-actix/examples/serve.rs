@@ -11,9 +11,13 @@ struct State {
 #[derive(HasContext)]
 struct Foo {
     #[param("baar")]
-    bar: String,
-    #[param]
     id: usize,
+    #[param("baar")]
+    bar: String,
+    #[header]
+    something: String,
+    #[header("a-bunch")]
+    a_bunch: Vec<u8>,
 }
 
 async fn test(context: Foo) -> Response {
