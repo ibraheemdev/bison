@@ -1,31 +1,9 @@
-use crate::http::{Response, ResponseBuilder};
+use crate::http::Response;
 
-use core::fmt;
 use std::convert::Infallible;
-use std::fmt::Debug;
+use std::fmt::{self, Debug};
 
-/// An error that can be converted into an HTTP response.
-///
-/// The most common way to implement this trait is with the derive macro:
-/// ```rust
-/// #[derive(ResponseError)]
-/// enum GetPostError {
-///     #[status(404)]
-///     #[json({ error: format!("Post with id '{}' not found", .id) })]
-///     PostNotFound { id: usize },
-///     #[status(400)]
-///     #[json({ error: "Unauthorized" })]
-///     UserNotFound,
-/// }
-/// ```
-///
-/// You can derive it on regular structs as well:
-/// ```rust
-/// #[derive(ResponseError)]
-/// #[status(404)]
-/// struct NotFound;
-/// ```
-pub trait ResponseError: Debug + 'static {
+pub trait ResponseError: Debug {
     fn respond(&mut self) -> Response;
 }
 
@@ -41,34 +19,34 @@ impl ResponseError for Infallible {
     }
 }
 
-impl ResponseError for Box<dyn ResponseError> {
+impl<'a> ResponseError for Box<dyn ResponseError + 'a> {
     fn respond(&mut self) -> Response {
         (&mut **self).respond()
     }
 }
 
-pub struct Error {
-    inner: Box<dyn ResponseError>,
+pub struct Error<'req> {
+    inner: Box<dyn ResponseError + 'req>,
 }
 
-impl fmt::Debug for Error {
+impl<'req> fmt::Debug for Error<'req> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:?}", self.inner)
     }
 }
 
-impl Error {
-    pub fn new(err: impl ResponseError) -> Self {
+impl<'req> Error<'req> {
+    pub fn new(err: impl ResponseError + 'req) -> Self {
         Self {
             inner: Box::new(err),
         }
     }
 
-    pub fn as_ref(&self) -> &impl ResponseError {
-        &self.inner
+    pub fn as_mut(&mut self) -> &mut (impl ResponseError + 'req) {
+        &mut self.inner
     }
 
-    pub fn into_response_error(self) -> impl ResponseError {
+    pub fn into_response_error(self) -> impl ResponseError + 'req {
         self.inner
     }
 }
@@ -86,9 +64,9 @@ impl Error {
 //
 // And we lose the `impl ResponseError for Error`, which isn't that big of a deal because the inner
 // error is still exposed.
-impl<E> From<E> for Error
+impl<'req, E> From<E> for Error<'req>
 where
-    E: ResponseError,
+    E: ResponseError + 'req,
 {
     fn from(err: E) -> Self {
         Self {
@@ -97,43 +75,21 @@ where
     }
 }
 
-pub trait IntoResponseError: Debug {
-    fn into_response_error(self) -> Error;
+pub trait IntoResponseError<'req>: Debug {
+    fn into_response_error(self) -> Error<'req>;
 }
 
-impl<E> IntoResponseError for E
+impl<'req, E> IntoResponseError<'req> for E
 where
-    E: ResponseError + Debug,
+    E: ResponseError + Debug + 'req,
 {
-    fn into_response_error(self) -> Error {
+    fn into_response_error(self) -> Error<'req> {
         self.into()
     }
 }
 
-impl IntoResponseError for Error {
-    fn into_response_error(self) -> Error {
+impl<'req> IntoResponseError<'req> for Error<'req> {
+    fn into_response_error(self) -> Error<'req> {
         self
-    }
-}
-
-pub struct ParamNotFound {
-    _priv: (),
-}
-
-impl ParamNotFound {
-    pub fn new() -> Self {
-        Self { _priv: () }
-    }
-}
-
-impl fmt::Debug for ParamNotFound {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_tuple("ParamNotFound").finish()
-    }
-}
-
-impl ResponseError for ParamNotFound {
-    fn respond(&mut self) -> Response {
-        Response::not_found()
     }
 }

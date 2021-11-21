@@ -1,162 +1,102 @@
-use crate::bison::State;
-use crate::endpoint::{Endpoint, Ref};
-use crate::send::{BoxFuture, SendBound};
-use crate::{Error, Request, Response};
+use crate::error::IntoResponseError;
+use crate::handler::ErasedHandler;
+use crate::http::{Request, Response};
+use crate::{bounded, Error};
 
-/// An HTTP middleware.
-///
-/// ```rust
-/// struct LoggerMiddleware;
-///
-/// impl Middleware for LoggerMiddleware {
-///     type Error = ();
-///
-///     fn call<'a>(
-///         &'a self,
-///         request: Request,
-///         next: impl Next + 'a
-///     ) -> BoxFuture<'a, Result<Response, ()>> {
-///         async move {
-///             let before = Instant::now();
-///             let response = next.call(request).await;
-///             let response_time = Instant::now() - before;
-///             log::info!("Requested '{}', response time: {}", request.path(), response_time);
-///         }.boxed()
-///     }
-/// }
-/// ```
-pub trait Wrap<S>: SendBound
-where
-    S: State,
-{
-    /// This is either a type implementing [`ResponseError`] or the boxed [`Error`]
-    type Error: Into<Error>;
+#[crate::async_trait]
+pub trait Wrap<'req>: bounded::Send + bounded::Sync {
+    type Error: IntoResponseError<'req>;
 
-    fn wrap<'a>(
-        &'a self,
-        req: Request<S>,
-        next: impl Next<'a, S>,
-    ) -> BoxFuture<'a, Result<Response, Self::Error>>;
-
-    fn and<W>(self, other: W) -> And<Self, W>
+    async fn call(
+        &self,
+        req: &'req Request,
+        next: impl Next<'req>,
+    ) -> Result<Response, Self::Error>
     where
-        W: Wrap<S>,
-        Self: Sized,
-    {
-        And {
-            inner: self,
-            outer: other,
-        }
-    }
+        'async_trait: 'req;
 }
 
-impl<S, W> Wrap<S> for &W
-where
-    S: State,
-    W: Wrap<S>,
-{
-    type Error = W::Error;
-
-    fn wrap<'a>(
-        &'a self,
-        req: Request<S>,
-        next: impl Next<'a, S>,
-    ) -> BoxFuture<'a, Result<Response, Self::Error>> {
-        W::wrap(self, req, next)
-    }
+#[crate::async_trait]
+pub trait Next<'req>: bounded::Send + bounded::Sync + 'req {
+    async fn call(self, req: &'req Request) -> Result<Response, Error<'req>>;
 }
 
-pub trait Next<'a, S>
-where
-    S: State,
-{
-    fn call(self, req: Request<S>) -> BoxFuture<'a, Result<Response, Error>>;
-}
-
-impl<'a, S, E> Next<'a, S> for Ref<'a, E>
-where
-    E: Endpoint<Request<S>, S, Error = Error>,
-    S: State,
-{
-    fn call(self, req: Request<S>) -> BoxFuture<'a, Result<Response, Error>> {
-        self.serve(req)
-    }
-}
-
-#[derive(Clone)]
-pub struct And<I, O> {
-    inner: I,
-    outer: O,
-}
-
-impl<S, I, O> Wrap<S> for And<I, O>
-where
-    S: State,
-    I: Wrap<S>,
-    O: Wrap<S>,
-{
-    type Error = O::Error;
-
-    fn wrap<'a>(
-        &'a self,
-        req: Request<S>,
-        next: impl Next<'a, S>,
-    ) -> BoxFuture<'a, Result<Response, Self::Error>> {
-        self.outer.wrap(
-            req,
-            And {
-                inner: next,
-                outer: &self.inner,
-            },
-        )
-    }
-}
-
-impl<'a, S, I, O> Endpoint<Request<S>, S> for And<I, O>
-where
-    S: State,
-    O: Wrap<S>,
-    I: Next<'a, S>,
-{
-    type Error = Error;
-
-    fn serve(&self, req: Request<S>) -> BoxFuture<'_, Result<Response, Error>> {
-        Box::pin(async move {
-            self.outer
-                .wrap(req, Ref::new(&self.inner))
-                .await
-                .map_err(Into::into)
-        })
-    }
-}
-
-/// A middleware that simply calls `next`. This type is useful in generic code where a type
-/// implement [`Middleware`] is expected.
-#[derive(Clone)]
-pub struct Call {
-    _priv: (),
-}
+#[non_exhaustive]
+pub struct Call;
 
 impl Call {
     pub fn new() -> Self {
-        Self { _priv: () }
+        Self
     }
 }
 
-impl<S> Wrap<S> for Call
-where
-    S: State,
-{
-    type Error = Error;
+#[crate::async_trait]
+impl<'req> Wrap<'req> for Call {
+    type Error = Error<'req>;
 
-    fn wrap<'a>(
-        &'a self,
-        req: Request<S>,
-        next: impl Next<'a, S>,
-    ) -> BoxFuture<'a, Result<Response, Error>> {
-        // this boxing is unfortunate because N::Future is already going to be boxed
-        // however I'm not sure it's worth moving the type N onto Wrap<N> for, because
-        // TAIT is coming soon
-        Box::pin(async move { next.serve(req).await })
+    async fn call(
+        &self,
+        req: &'req Request,
+        next: impl Next<'req>,
+    ) -> Result<Response, Self::Error> {
+        next.call(req).await
+    }
+}
+
+pub struct And<I, O> {
+    pub inner: I,
+    pub outer: O,
+}
+
+#[crate::async_trait]
+impl<'req, I, O> Wrap<'req> for And<I, O>
+where
+    I: Wrap<'req>,
+    O: Wrap<'req>,
+{
+    type Error = O::Error;
+
+    async fn call(&self, req: &'req Request, next: impl Next<'req>) -> Result<Response, Self::Error>
+    where
+        'async_trait: 'req,
+    {
+        self.outer
+            .call(
+                req,
+                And {
+                    inner: next,
+                    outer: &self.inner,
+                },
+            )
+            .await
+    }
+}
+
+#[crate::async_trait]
+impl<'req, I, O> Next<'req> for And<I, &'req O>
+where
+    O: Wrap<'req>,
+    I: Next<'req>,
+{
+    async fn call(self, req: &'req Request) -> Result<Response, Error<'req>> {
+        self.outer
+            .call(req, self.inner)
+            .await
+            .map_err(IntoResponseError::into_response_error)
+    }
+}
+
+pub struct DynNext<'bison>(&'bison dyn ErasedHandler);
+
+impl<'bison> DynNext<'bison> {
+    pub fn new(handler: &'bison dyn ErasedHandler) -> Self {
+        Self(handler)
+    }
+}
+
+#[crate::async_trait]
+impl<'req> Next<'req> for DynNext<'req> {
+    async fn call(self, req: &'req Request) -> Result<Response, Error> {
+        self.0.call(req).await
     }
 }

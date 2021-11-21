@@ -1,104 +1,66 @@
-use crate::endpoint::{Endpoint, WithContext};
+use crate::context::WithContext;
+use crate::handler::Handler;
 use crate::http::{Method, Request, Response};
 use crate::router::Router;
+use crate::state;
 use crate::wrap::{Call, Wrap};
-use crate::{Body, HasContext, Scope};
 
-pub trait State: Send + Sync + Clone + 'static {}
-impl<S> State for S where S: Send + Sync + Clone + 'static {}
-
-pub struct Bison<W, S> {
-    router: Router<W, S>,
-    state: S,
+pub struct Bison<W> {
+    router: Router<W>,
+    state: state::Map,
 }
 
-impl Bison<Call, ()> {
-    pub fn new() -> Bison<impl Wrap<()>, ()> {
+impl Bison<Call> {
+    pub fn new() -> Bison<impl Wrap<'static>> {
         Self {
             router: Router::new(),
-            state: (),
+            state: state::Map::new(),
         }
     }
 }
 
-impl<S> Bison<Call, S>
+impl<W> Bison<W>
 where
-    S: State,
+    W: for<'req> Wrap<'req>,
 {
-    pub fn with_state(state: S) -> Bison<impl Wrap<S>, S> {
-        Bison {
-            router: Router::new(),
-            state: state.into(),
-        }
-    }
-}
-
-impl<W, S> Bison<W, S>
-where
-    W: Wrap<S>,
-    S: State,
-{
-    pub fn wrap<O>(self, wrap: O) -> Bison<impl Wrap<S>, S>
-    where
-        O: Wrap<S>,
-    {
-        Bison {
-            router: self.router.wrap(wrap),
-            state: self.state,
-        }
-    }
-
-    pub fn route<E, P, C>(self, method: Method, path: P, endpoint: E) -> Self
-    where
-        P: Into<String>,
-        E: Endpoint<C, S> + 'static,
-        C: HasContext<S> + 'static,
-    {
-        Bison {
-            state: self.state,
-            router: self
-                .router
-                .route(method, path, WithContext::new(endpoint))
-                .expect("failed to insert route"),
-        }
-    }
-
-    pub async fn serve(&self, request: http::Request<Body>) -> Response {
-        let request = Request {
-            params: Vec::new(),
-            inner: request,
-            state: self.state.clone(),
-        };
-
-        self.router.serve(request).await
-    }
-
-    pub fn scope<M>(self, scope: Scope<M, S>) -> Self
-    where
-        M: Wrap<S> + Clone + 'static,
-    {
-        scope.register(self)
+    pub async fn serve(&self, mut req: Request) -> Response {
+        req.extensions_mut().insert(self.state.clone());
+        self.router.serve(req).await
     }
 }
 
 macro_rules! insert_route {
     ($name:ident => Method::$method:ident) => {
         #[doc = concat!("Insert a route for the `", stringify!($method), "` method.")]
-        pub fn $name<P, E, C>(self, path: P, endpoint: E) -> Self
+        /// ```rust
+        /// async fn home(_: ()) -> &'static str {
+        ///     "Welcome!"
+        /// }
+        ///
+        /// let bison = Bison::new();
+        /// bison.get("/home", home);
+        /// ```
+        pub fn $name<H, C>(self, path: &str, handler: H) -> Bison<impl for<'req> Wrap<'req>>
         where
-            P: Into<String>,
-            E: Endpoint<C, S> + 'static,
-            C: HasContext<S> + 'static,
+            H: for<'req> Handler<'req, C>,
+            C: for<'req> WithContext<'req>,
         {
-            self.route(Method::$method, path, endpoint)
+            let router = self
+                .router
+                .route(Method::$method, path, handler)
+                .expect("failed to insert route");
+
+            Bison {
+                router,
+                state: self.state,
+            }
         }
     };
 }
 
-impl<W, S> Bison<W, S>
+impl<W> Bison<W>
 where
-    W: Wrap<S>,
-    S: State,
+    W: for<'req> Wrap<'req>,
 {
     insert_route!(get => Method::GET);
     insert_route!(put => Method::PUT);

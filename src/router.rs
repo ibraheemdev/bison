@@ -1,59 +1,68 @@
-use crate::bison::State;
-use crate::endpoint::Endpoint;
-use crate::http::{header, Method, Request, Response, ResponseBuilder, StatusCode};
-use crate::wrap::{self, Wrap};
-use crate::{Body, Error, ResponseError};
+use crate::context::{Context, WithContext};
+use crate::error::{IntoResponseError, ResponseError};
+use crate::handler::{ErasedHandler, Handler, HandlerFn};
+use crate::http::{header, Body, Method, Params, Request, Response, ResponseBuilder, StatusCode};
+use crate::wrap::{And, Call, DynNext, Wrap};
 
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use matchit::Node;
 
-pub(crate) struct Router<W, S> {
+pub struct Router<W> {
     wrap: W,
-    routes: HashMap<Method, Node<Box<dyn Endpoint<Request<S>, S, Error = Error>>>>,
+    routes: HashMap<Method, Node<Arc<dyn ErasedHandler>>>,
 }
 
-impl<S> Router<wrap::Call, S>
-where
-    S: State,
-{
+impl Router<Call> {
     pub(crate) fn new() -> Self {
         Self {
-            wrap: wrap::Call::new(),
+            wrap: Call::new(),
             routes: HashMap::with_capacity(6),
         }
     }
 }
 
-impl<W, S> Router<W, S>
+impl<W> Router<W>
 where
-    W: Wrap<S>,
-    S: State,
+    W: for<'req> Wrap<'req>,
 {
-    pub(crate) fn wrap<O>(self, wrap: O) -> Router<impl Wrap<S>, S>
-    where
-        O: Wrap<S>,
-    {
+    pub(crate) fn wrap(self, wrap: impl for<'req> Wrap<'req>) -> Router<impl for<'req> Wrap<'req>> {
         Router {
-            wrap: self.wrap.and(wrap),
+            wrap: And {
+                inner: self.wrap,
+                outer: wrap,
+            },
             routes: self.routes,
         }
     }
 
-    pub(crate) fn route<E, P>(
+    pub(crate) fn route<H, C, P>(
         mut self,
         method: Method,
         path: P,
-        endpoint: E,
+        handler: H,
     ) -> Result<Self, matchit::InsertError>
     where
         P: Into<String>,
-        E: Endpoint<Request<S>, S, Error = Error> + 'static,
+        H: for<'req> Handler<'req, C>,
+        C: for<'req> WithContext<'req>,
     {
+        let handler = HandlerFn::new({
+            move |req| {
+                let handler = handler.clone();
+                Box::pin(async move {
+                    let context = C::Context::extract(req).await;
+                    handler.call(context).await
+                })
+            }
+        });
+
         self.routes
             .entry(method)
             .or_default()
-            .insert(path, Box::new(endpoint))?;
+            .insert(path, Arc::new(handler))?;
+
         Ok(self)
     }
 
@@ -91,25 +100,21 @@ where
         allowed
     }
 
-    pub(crate) async fn serve(&self, mut req: Request<S>) -> Response {
+    pub(crate) async fn serve(&self, mut req: Request) -> Response {
         let path = req.uri().path();
         match self.routes.get(req.method()) {
             Some(node) => match node.at(path) {
                 Ok(matched) => {
-                    let endpoint = matched.value;
+                    let handler = matched.value;
                     let params = matched
                         .params
                         .iter()
                         .map(|(k, v)| (k.to_owned(), v.to_owned()))
                         .collect::<Vec<_>>();
-                    req.params = params;
-                    match endpoint.serve(req).await {
+                    req.extensions_mut().insert(Params(params));
+                    match self.wrap.call(&req, DynNext::new(&*handler.clone())).await {
                         Ok(ok) => ok,
-                        Err(err) => {
-                            // TODO: error logging middleware
-                            dbg!(&err);
-                            err.into_response_error().respond()
-                        }
+                        Err(err) => err.into_response_error().as_mut().respond(),
                     }
                 }
                 Err(e) if e.tsr() && req.method() != Method::CONNECT && path != "/" => {
@@ -118,13 +123,13 @@ where
                     } else {
                         format!("{}/", path)
                     };
-                    Response::builder()
+                    ResponseBuilder::new()
                         .header(header::LOCATION, path)
                         .status(StatusCode::PERMANENT_REDIRECT)
                         .body(Body::empty())
                         .unwrap()
                 }
-                Err(_) => Response::builder()
+                Err(_) => ResponseBuilder::new()
                     .status(StatusCode::NOT_FOUND)
                     .body(Body::empty())
                     .unwrap(),
@@ -132,13 +137,13 @@ where
             None => {
                 let allowed = self.allowed_methods(path);
                 if !allowed.is_empty() {
-                    Response::builder()
+                    ResponseBuilder::new()
                         .header(header::ALLOW, allowed.join(", "))
                         .status(StatusCode::METHOD_NOT_ALLOWED)
                         .body(Body::empty())
                         .unwrap()
                 } else {
-                    Response::builder()
+                    ResponseBuilder::new()
                         .status(StatusCode::NOT_FOUND)
                         .body(Body::empty())
                         .unwrap()

@@ -1,65 +1,61 @@
-use crate::{bison::State, Error, HasContext};
+use crate::error::ResponseError;
+use crate::http::{self, Body, Request, Response, ResponseBuilder, StatusCode};
 
-use std::future::Future;
+use std::fmt;
 
-/// A type that is capable of extracting a specific value from it's context.
-///
-/// ```rust
-/// use bison::{HasContext, ResponseError, Extractor};
-/// use bison::error::Unauthorized;
-///
-/// #[derive(HasContext)]
-/// struct CurrentUser {
-///     #[header("Auth")]
-///     token: String,
-///     #[state]
-///     db: Database
-/// }
-///
-/// struct User { name: String }
-///
-/// impl Extractor for CurrentUser {
-///     type Output = User;
-///     type Error = Unauthorized;
-///     type Future = BoxFuture<'static, Result<User, Unauthorized>>;
-///
-///     fn extract(self) -> Self::Future {
-///         async { self.db.get_user(self.token).await.ok_or(Unauthorized) }
-///     }
-/// }
-/// ```
-///
-/// Extractors can be used to derive extra context from a request:
-/// ```rust
-/// #[derive(HasContext)]
-/// struct ResetPassword {
-///     #[query("password")]
-///     new_password: String,
-///     #[extract(CurrentUser)]
-///     user: User,
-///     #[state]
-///     database: Database
-/// }
-///
-/// impl ResetPassword {
-///     async fn handle(self) -> Result<Response, Infallible> {
-///         self.database.update_user_password(user.id, new_password);
-///         Ok(Response::success())
-///     }
-/// }
-/// ```
-pub trait Extract<S: State>: HasContext<S> {
-    /// The type that is being extracted.
-    type Output;
+pub trait Params<T> {
+    fn get(self) -> T;
+}
 
-    /// An error that can occur during extraction.
-    ///
-    /// This is either a type implementing [`ResponseError`] or the boxed [`Error`]
-    type Error: Into<Error>;
+pub enum None {}
 
-    /// The future returned by [`extract`](Self::extract).
-    type Future: Future<Output = Result<Self::Output, Self::Error>>;
+fn param<'req, T>(
+    req: &'req Request,
+    name: impl Params<&'static str>,
+) -> Result<T, ParamError<'req, T::Error>>
+where
+    T: FromParam<'req>,
+{
+    let name = name.get();
+    let params = req.extensions().get::<http::Params>().unwrap();
+    let param = params.get(name).ok_or(ParamError { error: None, name })?;
+    T::from_param(param).map_err(|e| ParamError {
+        error: Some(e),
+        name,
+    })
+}
 
-    /// Perform the extraction.
-    fn extract(self) -> Self::Future;
+struct ParamError<'req, E> {
+    error: Option<E>,
+    name: &'req str,
+}
+
+impl<'req, E> fmt::Debug for ParamError<'req, E>
+where
+    E: fmt::Debug,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match &self.error {
+            Some(err) => write!(f, "error extracting param '{}': {:?}", self.name, err),
+            None => write!(f, "param '{}' not found", self.name),
+        }
+    }
+}
+
+impl<'req, E> ResponseError for ParamError<'req, E>
+where
+    E: fmt::Debug,
+{
+    fn respond(&mut self) -> Response {
+        ResponseBuilder::new()
+            .status(StatusCode::NOT_FOUND)
+            .body(Body::empty())
+            .unwrap()
+    }
+}
+
+pub trait FromParam<'req>: Sized {
+    type Error: fmt::Debug;
+
+    fn from_param(param: &'req str) -> Result<Self, Self::Error>;
 }

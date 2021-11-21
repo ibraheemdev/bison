@@ -3,26 +3,14 @@ name = "bison"
 version = "0.0.0"
 license = "MIT"
 authors = ["ibraheem <ibrah1440@gmail.com>"]
-edition = "2018"
+edition = "2021"
 description = "A powerful web-application framework that does the heavy lifting for you."
 repository = "https://github.com/ibraheemdev/bison"
 readme = "README.md"
 
 [dependencies]
-bytes = "1.0.1"
+async-trait = "0.1.51"
+bytes = "1.1.0"
+futures-core = "0.3.17"
 http = "0.2.4"
-futures-util = { version = "0.3.16", default-features = false }
 matchit = "0.4.2"
-bison-codegen = { path = "./bison-codegen" }
-
-[features]
-default = []
-not-send = []
-
-[workspace]
-members = [
-    "bison-codegen",
-    "bison-hyper",
-    "bison-actix",
-    "tester"
-]
