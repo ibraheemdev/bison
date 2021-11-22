@@ -121,9 +121,7 @@ fn expand(input: DeriveInput) -> Result<TokenStream> {
         impl #impl_generics ::bison::Context<#request_lifetime> for #name  #ty_generics #where_clause {
             fn extract(
                 req: &#request_lifetime ::bison::http::Request
-            ) -> ::std::pin::Pin<::std::boxed::Box<
-                    dyn ::bison::bounded::Future<Output = Result<Self, ::bison::Error>> + #request_lifetime>>
-            {
+            ) ->  ::bison::bounded::BoxFuture<#request_lifetime, Result<Self, ::bison::Error>> {
                 Box::pin(async move { Ok(#name { #(#fields)* }) })
             }
         }

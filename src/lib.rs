@@ -15,3 +15,5 @@ pub use bison::Bison;
 pub use bison_codegen::*;
 pub use context::{Context, WithContext};
 pub use error::Error;
+pub use state::State;
+pub use wrap::Wrap;

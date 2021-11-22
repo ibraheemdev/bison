@@ -6,14 +6,14 @@ use std::convert::Infallible;
 use std::fmt;
 
 pub struct OptionalArg<T> {
-    pub val: Option<T>,
+    pub value: Option<T>,
     pub field_name: &'static str,
 }
 
 impl<T> From<Arg<T>> for OptionalArg<T> {
     fn from(arg: Arg<T>) -> Self {
         Self {
-            val: Some(arg.val),
+            value: Some(arg.value),
             field_name: arg.field_name,
         }
     }
@@ -22,7 +22,7 @@ impl<T> From<Arg<T>> for OptionalArg<T> {
 impl<T> From<NoArg> for OptionalArg<T> {
     fn from(arg: NoArg) -> Self {
         Self {
-            val: None,
+            value: None,
             field_name: arg.field_name,
         }
     }
@@ -30,13 +30,13 @@ impl<T> From<NoArg> for OptionalArg<T> {
 
 pub struct Arg<T> {
     pub field_name: &'static str,
-    pub val: T,
+    pub value: T,
 }
 
 impl<T> Arg<T> {
     #[doc(hidden)]
-    pub fn new(field_name: &'static str, val: T) -> Self {
-        Self { field_name, val }
+    pub fn new(field_name: &'static str, value: T) -> Self {
+        Self { field_name, value }
     }
 }
 
@@ -55,17 +55,11 @@ pub fn default<'r, T>(req: &'r Request, arg: NoArg) -> Result<T, DefaultError>
 where
     T: FromParam<'r> + FromQuery<'r>,
 {
-    param(
-        req,
-        NoArg {
-            field_name: arg.field_name,
-        }
-        .into(),
-    )
-    .or_else(|_| query(req, arg))
-    .map_err(|_| DefaultError {
-        ty: std::any::type_name::<T>(),
-    })
+    param(req, NoArg::new(arg.field_name).into())
+        .or_else(|_| query(req, arg))
+        .map_err(|_| DefaultError {
+            ty: std::any::type_name::<T>(),
+        })
 }
 
 pub fn param<'r, T>(
@@ -75,7 +69,7 @@ pub fn param<'r, T>(
 where
     T: FromParam<'r>,
 {
-    let name = param.val.unwrap_or(param.field_name);
+    let name = param.value.unwrap_or(param.field_name);
     let params = req.extensions().get::<http::Params>().unwrap();
     let param = params.get(name).ok_or(ParamError { error: None, name })?;
     T::from_param(param).map_err(|e| ParamError {

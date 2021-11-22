@@ -1,12 +1,8 @@
 use crate::http::Request;
 use crate::{bounded, Error};
 
-use std::pin::Pin;
-
 pub trait Context<'r>: bounded::Send + bounded::Sync + Sized {
-    fn extract(
-        req: &'r Request,
-    ) -> Pin<Box<dyn bounded::Future<Output = Result<Self, Error>> + 'r>>;
+    fn extract(req: &'r Request) -> bounded::BoxFuture<'r, Result<Self, Error>>;
 }
 
 pub trait WithContext<'r> {
@@ -14,15 +10,13 @@ pub trait WithContext<'r> {
 }
 
 impl<'r> Context<'r> for &'r Request {
-    fn extract(
-        req: &'r Request,
-    ) -> Pin<Box<dyn bounded::Future<Output = Result<Self, Error>> + 'r>> {
+    fn extract(req: &'r Request) -> bounded::BoxFuture<'r, Result<Self, Error>> {
         Box::pin(async move { Ok(req) })
     }
 }
 
 impl<'r> Context<'r> for () {
-    fn extract(_: &'r Request) -> Pin<Box<dyn bounded::Future<Output = Result<Self, Error>> + 'r>> {
+    fn extract(_: &'r Request) -> bounded::BoxFuture<'r, Result<Self, Error>> {
         Box::pin(async move { Ok(()) })
     }
 }

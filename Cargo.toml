@@ -27,5 +27,6 @@ not-send = []
 
 [workspace]
 members = [
-    "bison-codegen"
+    "bison-codegen",
+    "bison-hyper"
 ]

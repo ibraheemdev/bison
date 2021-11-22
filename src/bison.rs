@@ -36,7 +36,7 @@ impl Bison<Call> {
     ///
     /// let bison = Bison::new();
     /// ```
-    pub fn new() -> Bison<impl Wrap<'static>> {
+    pub fn new() -> Bison<impl for<'r> Wrap<'r>> {
         Self {
             router: Router::new(),
             state: state::Map::new(),

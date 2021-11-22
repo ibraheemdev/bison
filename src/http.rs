@@ -1,5 +1,6 @@
 use crate::bounded;
 
+use std::error::Error as StdError;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use std::{fmt, mem};
@@ -21,14 +22,14 @@ impl Params {
         self.0
             .iter()
             .find(|(x, _)| x == name)
-            .map(|(x, _)| x.as_ref())
+            .map(|(_, val)| val.as_ref())
     }
 }
 
 /// Respresents the body of an HTTP message.
 #[non_exhaustive]
 pub enum Body {
-    Stream(Pin<Box<dyn bounded::Stream<Item = Result<Bytes, Box<dyn bounded::Error>>>>>),
+    Stream(bounded::BoxStream<'static, Result<Bytes, bounded::BoxError>>),
     Once(Bytes),
     Empty,
 }
@@ -37,17 +38,17 @@ impl Body {
     /// Create a `Body` from a stream of bytes.
     pub fn stream<S, E>(stream: S) -> Self
     where
-        S: bounded::Stream<Item = Result<Bytes, E>> + 'static,
-        E: bounded::Error + 'static,
+        S: Stream<Item = Result<Bytes, E>> + bounded::Send + bounded::Sync + 'static,
+        E: StdError + bounded::Send + bounded::Sync + 'static,
     {
         pub struct MapErr<S>(S);
 
         impl<T, E, S> Stream for MapErr<S>
         where
-            E: bounded::Error + 'static,
+            E: StdError + bounded::Send + bounded::Sync + 'static,
             S: Stream<Item = Result<T, E>>,
         {
-            type Item = Result<T, Box<dyn bounded::Error>>;
+            type Item = Result<T, bounded::BoxError>;
 
             fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
                 unsafe { self.map_unchecked_mut(|s| &mut s.0) }
@@ -60,8 +61,8 @@ impl Body {
     }
 
     /// Create a body directly from bytes.
-    pub fn once(bytes: Bytes) -> Self {
-        Self::Once(bytes)
+    pub fn once(bytes: impl Into<Bytes>) -> Self {
+        Self::Once(bytes.into())
     }
 
     /// Create an empty `Body`.
@@ -83,7 +84,7 @@ impl fmt::Debug for Body {
 }
 
 impl Stream for Body {
-    type Item = Result<Bytes, Box<dyn bounded::Error>>;
+    type Item = Result<Bytes, bounded::BoxError>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         match &mut *self {
