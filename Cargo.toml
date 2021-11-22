@@ -14,3 +14,13 @@ bytes = "1.1.0"
 futures-core = "0.3.17"
 http = "0.2.4"
 matchit = "0.4.2"
+bison-codegen = { path = "./bison-codegen" }
+
+[features]
+default = []
+not-send = []
+
+[workspace]
+members = [
+    "bison-codegen"
+]
