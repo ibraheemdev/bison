@@ -18,10 +18,20 @@ name = "bison"
 version = "0.0.0"
 dependencies = [
  "async-trait",
+ "bison-codegen",
  "bytes",
  "futures-core",
  "http",
  "matchit",
+]
+
+[[package]]
+name = "bison-codegen"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]

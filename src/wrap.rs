@@ -4,21 +4,21 @@ use crate::http::{Request, Response};
 use crate::{bounded, Error};
 
 #[crate::async_trait]
-pub trait Wrap<'req>: bounded::Send + bounded::Sync {
-    type Error: IntoResponseError<'req>;
+pub trait Wrap<'r>: bounded::Send + bounded::Sync {
+    type Error: IntoResponseError<'r>;
 
     async fn call(
         &self,
-        req: &'req Request,
-        next: impl Next<'req>,
+        req: &'r Request,
+        next: impl Next<'r>,
     ) -> Result<Response, Self::Error>
     where
-        'async_trait: 'req;
+        'async_trait: 'r;
 }
 
 #[crate::async_trait]
-pub trait Next<'req>: bounded::Send + bounded::Sync + 'req {
-    async fn call(self, req: &'req Request) -> Result<Response, Error<'req>>;
+pub trait Next<'r>: bounded::Send + bounded::Sync + 'r {
+    async fn call(self, req: &'r Request) -> Result<Response, Error<'r>>;
 }
 
 #[non_exhaustive]
@@ -31,13 +31,13 @@ impl Call {
 }
 
 #[crate::async_trait]
-impl<'req> Wrap<'req> for Call {
-    type Error = Error<'req>;
+impl<'r> Wrap<'r> for Call {
+    type Error = Error<'r>;
 
     async fn call(
         &self,
-        req: &'req Request,
-        next: impl Next<'req>,
+        req: &'r Request,
+        next: impl Next<'r>,
     ) -> Result<Response, Self::Error> {
         next.call(req).await
     }
@@ -49,16 +49,16 @@ pub struct And<I, O> {
 }
 
 #[crate::async_trait]
-impl<'req, I, O> Wrap<'req> for And<I, O>
+impl<'r, I, O> Wrap<'r> for And<I, O>
 where
-    I: Wrap<'req>,
-    O: Wrap<'req>,
+    I: Wrap<'r>,
+    O: Wrap<'r>,
 {
     type Error = O::Error;
 
-    async fn call(&self, req: &'req Request, next: impl Next<'req>) -> Result<Response, Self::Error>
+    async fn call(&self, req: &'r Request, next: impl Next<'r>) -> Result<Response, Self::Error>
     where
-        'async_trait: 'req,
+        'async_trait: 'r,
     {
         self.outer
             .call(
@@ -73,12 +73,12 @@ where
 }
 
 #[crate::async_trait]
-impl<'req, I, O> Next<'req> for And<I, &'req O>
+impl<'r, I, O> Next<'r> for And<I, &'r O>
 where
-    O: Wrap<'req>,
-    I: Next<'req>,
+    O: Wrap<'r>,
+    I: Next<'r>,
 {
-    async fn call(self, req: &'req Request) -> Result<Response, Error<'req>> {
+    async fn call(self, req: &'r Request) -> Result<Response, Error<'r>> {
         self.outer
             .call(req, self.inner)
             .await
@@ -95,8 +95,8 @@ impl<'bison> DynNext<'bison> {
 }
 
 #[crate::async_trait]
-impl<'req> Next<'req> for DynNext<'req> {
-    async fn call(self, req: &'req Request) -> Result<Response, Error> {
+impl<'r> Next<'r> for DynNext<'r> {
+    async fn call(self, req: &'r Request) -> Result<Response, Error> {
         self.0.call(req).await
     }
 }

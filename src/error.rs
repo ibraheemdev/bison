@@ -25,48 +25,35 @@ impl<'a> ResponseError for Box<dyn ResponseError + 'a> {
     }
 }
 
-pub struct Error<'req> {
-    inner: Box<dyn ResponseError + 'req>,
+pub struct Error<'r> {
+    inner: Box<dyn ResponseError + 'r>,
 }
 
-impl<'req> fmt::Debug for Error<'req> {
+impl<'r> fmt::Debug for Error<'r> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:?}", self.inner)
     }
 }
 
-impl<'req> Error<'req> {
-    pub fn new(err: impl ResponseError + 'req) -> Self {
+impl<'r> Error<'r> {
+    pub fn new(err: impl ResponseError + 'r) -> Self {
         Self {
             inner: Box::new(err),
         }
     }
 
-    pub fn as_mut(&mut self) -> &mut (impl ResponseError + 'req) {
+    pub fn as_mut(&mut self) -> &mut (impl ResponseError + 'r) {
         &mut self.inner
     }
 
-    pub fn into_response_error(self) -> impl ResponseError + 'req {
+    pub fn into_response_error(self) -> impl ResponseError + 'r {
         self.inner
     }
 }
 
-// We can't implement From<E> *for* Error and ResponseError for Error, but we still want users to be
-// able to return the boxed Error from endpoints, and use the ? operator to propagate reponse
-// errors. To accomplish this we have:
-// ```rust
-// trait Endpoint/Wrap/Other {
-//     type Error: IntoResponseError;
-// }
-//
-// impl<E: ResponseError> From<E> for Error { ... }
-// ```
-//
-// And we lose the `impl ResponseError for Error`, which isn't that big of a deal because the inner
-// error is still exposed.
-impl<'req, E> From<E> for Error<'req>
+impl<'r, E> From<E> for Error<'r>
 where
-    E: ResponseError + 'req,
+    E: ResponseError + 'r,
 {
     fn from(err: E) -> Self {
         Self {
@@ -75,21 +62,21 @@ where
     }
 }
 
-pub trait IntoResponseError<'req>: Debug {
-    fn into_response_error(self) -> Error<'req>;
+pub trait IntoResponseError<'r>: Debug {
+    fn into_response_error(self) -> Error<'r>;
 }
 
-impl<'req, E> IntoResponseError<'req> for E
+impl<'r, E> IntoResponseError<'r> for E
 where
-    E: ResponseError + Debug + 'req,
+    E: ResponseError + Debug + 'r,
 {
-    fn into_response_error(self) -> Error<'req> {
+    fn into_response_error(self) -> Error<'r> {
         self.into()
     }
 }
 
-impl<'req> IntoResponseError<'req> for Error<'req> {
-    fn into_response_error(self) -> Error<'req> {
+impl<'r> IntoResponseError<'r> for Error<'r> {
+    fn into_response_error(self) -> Error<'r> {
         self
     }
 }

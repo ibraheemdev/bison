@@ -2,15 +2,40 @@ use crate::context::WithContext;
 use crate::handler::Handler;
 use crate::http::{Method, Request, Response};
 use crate::router::Router;
-use crate::state;
+use crate::state::{self, State};
 use crate::wrap::{Call, Wrap};
 
+/// Where everything happens.
+///
+/// `Bison` is the entrypoint of your application. You can register HTTP
+/// handlers, apply middleware, inject state, and register modules.
+///
+/// Most users will hand this off to a separate server crate, such as
+/// [`bison_hyper`] or [`bison_actix`].
+///
+/// ```
+/// use bison::Bison;
+///
+/// let bison = Bison::new()
+///     .get("/home", home)
+///     .get("/user/:id", get_user)
+///     .wrap(Cors::all())
+///     .register(Tera::new("./templates"))
+///     .inject(Database::connect("localhost:20717"));
+/// ```
 pub struct Bison<W> {
     router: Router<W>,
     state: state::Map,
 }
 
 impl Bison<Call> {
+    /// Create a new `Bison`.
+    ///
+    /// ```
+    /// use bison::Bison;
+    ///
+    /// let bison = Bison::new();
+    /// ```
     pub fn new() -> Bison<impl Wrap<'static>> {
         Self {
             router: Router::new(),
@@ -21,29 +46,111 @@ impl Bison<Call> {
 
 impl<W> Bison<W>
 where
-    W: for<'req> Wrap<'req>,
+    W: for<'r> Wrap<'r>,
 {
+    /// Insert a route for the `GET` method.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use bison::Bison;
+    ///
+    /// async fn home() -> &'static str {
+    ///     "Hello world!"
+    /// }
+    ///
+    /// let bison = Bison::new().get("/", home);
+    /// ```
+    pub fn get<H, C>(self, path: &str, handler: H) -> Bison<impl for<'r> Wrap<'r>>
+    where
+        H: for<'r> Handler<'r, C>,
+        C: for<'r> WithContext<'r>,
+    {
+        let router = self
+            .router
+            .route(Method::GET, path, handler)
+            .expect("failed to insert route");
+
+        Bison {
+            router,
+            state: self.state,
+        }
+    }
+
+    route!(put => PUT);
+    route!(post => POST);
+    route!(head => HEAD);
+    route!(patch => PATCH);
+    route!(delete => DELETE);
+    route!(options => OPTIONS);
+
+    /// Inject global application state.
+    ///
+    /// Any injected state will be accessible to handlers through the
+    /// [`state`](crate::extract::state) extractor.
+    ///
+    /// ```
+    /// # struct Database;
+    /// # impl Database {
+    /// #     fn connect(_: &str) -> Self { Self }
+    /// #     async fn get_user(id: usize) -> String { String::new() }
+    /// # }
+    /// use bison::{Bison, Context};
+    /// use bison::extract::state;
+    ///
+    /// #[derive(Context)]
+    /// struct GetUser {
+    ///     id: usize,
+    ///     #[cx(state)]
+    ///     db: Database
+    /// }
+    ///
+    /// async fn get_user(cx: GetUser) -> String {
+    ///     let user = cx.db.get_user(cx.id).await;
+    ///     format!("user: {}", user)
+    /// }
+    ///
+    /// let database_url = std::env::var("DATABASE_URL").unwrap();
+    /// let bison = Bison::new()
+    ///     .get("/user/:id", get_user)
+    ///     .inject(Database::connect(&database_url));
+    /// ```
+    pub fn inject<T: State>(self, state: T) -> Self {
+        Self {
+            router: self.router,
+            state: self
+                .state
+                .insert(state)
+                .expect("cannot inject state after server has started"),
+        }
+    }
+
+    pub fn wrap<O>(self, wrap: impl for<'r> Wrap<'r>) -> Bison<impl for<'r> Wrap<'r>> {
+        Bison {
+            router: self.router.wrap(wrap),
+            state: self.state,
+        }
+    }
+
+    /// Serve a single HTTP request.
+    ///
+    /// Most users will not interact with this method directly,
+    /// and instead use a server crate such as [`bison_hyper`]
+    /// or [`bison_actix`].
     pub async fn serve(&self, mut req: Request) -> Response {
         req.extensions_mut().insert(self.state.clone());
         self.router.serve(req).await
     }
 }
 
-macro_rules! insert_route {
-    ($name:ident => Method::$method:ident) => {
+macro_rules! route {
+    ($name:ident => $method:ident) => {
         #[doc = concat!("Insert a route for the `", stringify!($method), "` method.")]
-        /// ```rust
-        /// async fn home(_: ()) -> &'static str {
-        ///     "Welcome!"
-        /// }
-        ///
-        /// let bison = Bison::new();
-        /// bison.get("/home", home);
-        /// ```
-        pub fn $name<H, C>(self, path: &str, handler: H) -> Bison<impl for<'req> Wrap<'req>>
+        /// See [`get`](Self::get) for examples.
+        pub fn $name<H, C>(self, path: &str, handler: H) -> Bison<impl for<'r> Wrap<'r>>
         where
-            H: for<'req> Handler<'req, C>,
-            C: for<'req> WithContext<'req>,
+            H: for<'r> Handler<'r, C>,
+            C: for<'r> WithContext<'r>,
         {
             let router = self
                 .router
@@ -58,15 +165,4 @@ macro_rules! insert_route {
     };
 }
 
-impl<W> Bison<W>
-where
-    W: for<'req> Wrap<'req>,
-{
-    insert_route!(get => Method::GET);
-    insert_route!(put => Method::PUT);
-    insert_route!(post => Method::POST);
-    insert_route!(delete => Method::DELETE);
-    insert_route!(head => Method::HEAD);
-    insert_route!(options => Method::OPTIONS);
-    insert_route!(patch => Method::PATCH);
-}
+pub(self) use route;
