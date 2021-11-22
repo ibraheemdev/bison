@@ -161,17 +161,17 @@ fn extract(field: &Field) -> Result<TokenStream> {
         };
 
         let param = match param {
-            Some(param) => quote! { Param::new(#field_name, #param) },
-            None => quote! { NoParam::new(#field_name) },
+            Some(param) => quote! { Arg::new(#field_name, #param) },
+            None => quote! { NoArg::new(#field_name) },
         };
 
         return Ok(quote_spanned! { field.ty.span() =>
-            #extractor(req, ::bison::extract::#param).map_err(::bison::Error::from)?
+            #extractor(req, ::bison::extract::#param.into()).map_err(::bison::Error::from)?
         });
     }
 
     return Ok(quote_spanned! { field.ty.span() =>
-        ::bison::extract::default(req, ::bison::extract::NoParam::new(#field_name))
+        ::bison::extract::default(req, ::bison::extract::NoArg::new(#field_name).into())
             .map_err(::bison::Error::from)?
     });
 }

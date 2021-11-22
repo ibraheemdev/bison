@@ -1,17 +1,18 @@
 use crate::http::Response;
 
 use std::convert::Infallible;
-use std::fmt::{self, Debug};
+use std::fmt::{self, Debug, Display};
 
-pub trait ResponseError: Debug {
+pub trait ResponseError: Debug + Display {
     fn respond(&mut self) -> Response;
 }
 
-impl ResponseError for Response {
-    fn respond(&mut self) -> Response {
-        std::mem::take(self)
-    }
-}
+// TODO
+// impl ResponseError for Response {
+//     fn respond(&mut self) -> Response {
+//         std::mem::take(self)
+//     }
+// }
 
 impl ResponseError for Infallible {
     fn respond(&mut self) -> Response {
@@ -32,6 +33,12 @@ pub struct Error<'r> {
 impl<'r> fmt::Debug for Error<'r> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:?}", self.inner)
+    }
+}
+
+impl<'r> fmt::Display for Error<'r> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.inner)
     }
 }
 
@@ -62,13 +69,13 @@ where
     }
 }
 
-pub trait IntoResponseError<'r>: Debug {
+pub trait IntoResponseError<'r> {
     fn into_response_error(self) -> Error<'r>;
 }
 
 impl<'r, E> IntoResponseError<'r> for E
 where
-    E: ResponseError + Debug + 'r,
+    E: ResponseError + 'r,
 {
     fn into_response_error(self) -> Error<'r> {
         self.into()

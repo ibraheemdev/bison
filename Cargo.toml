@@ -15,6 +15,11 @@ futures-core = "0.3.17"
 http = "0.2.4"
 matchit = "0.4.2"
 bison-codegen = { path = "./bison-codegen" }
+serde = "1.0.130"
+serde_urlencoded = "0.7.0"
+
+[dev-dependencies]
+serde = { version = "1.0.130", features = ["derive"] }
 
 [features]
 default = []

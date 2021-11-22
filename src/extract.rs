@@ -4,96 +4,78 @@ use crate::state::{self, State};
 
 use std::convert::Infallible;
 use std::fmt;
-use std::marker::PhantomData;
 
-pub trait Has<T> {
-    fn get(&mut self) -> T;
-    fn field_name(&self) -> &'static str;
+pub struct OptionalArg<T> {
+    pub val: Option<T>,
+    pub field_name: &'static str,
 }
 
-pub struct Param<T> {
-    field_name: &'static str,
-    val: Option<T>,
+impl<T> From<Arg<T>> for OptionalArg<T> {
+    fn from(arg: Arg<T>) -> Self {
+        Self {
+            val: Some(arg.val),
+            field_name: arg.field_name,
+        }
+    }
 }
 
-impl<T> Param<T> {
+impl<T> From<NoArg> for OptionalArg<T> {
+    fn from(arg: NoArg) -> Self {
+        Self {
+            val: None,
+            field_name: arg.field_name,
+        }
+    }
+}
+
+pub struct Arg<T> {
+    pub field_name: &'static str,
+    pub val: T,
+}
+
+impl<T> Arg<T> {
+    #[doc(hidden)]
     pub fn new(field_name: &'static str, val: T) -> Self {
-        Self {
-            field_name,
-            val: Some(val),
-        }
+        Self { field_name, val }
     }
 }
 
-impl<T> Has<T> for Param<T> {
-    fn get(&mut self) -> T {
-        self.val.take().unwrap()
-    }
-
-    fn field_name(&self) -> &'static str {
-        self.field_name
-    }
+pub struct NoArg {
+    pub field_name: &'static str,
 }
 
-impl<T> Has<Option<T>> for Param<T> {
-    fn get(&mut self) -> Option<T> {
-        self.val.take()
-    }
-
-    fn field_name(&self) -> &'static str {
-        self.field_name
-    }
-}
-
-pub struct NoParam<T> {
-    field_name: &'static str,
-    _t: PhantomData<T>,
-}
-
-impl<T> NoParam<T> {
+impl NoArg {
+    #[doc(hidden)]
     pub fn new(field_name: &'static str) -> Self {
-        Self {
-            field_name,
-            _t: PhantomData,
+        Self { field_name }
+    }
+}
+
+pub fn default<'r, T>(req: &'r Request, arg: NoArg) -> Result<T, DefaultError>
+where
+    T: FromParam<'r> + FromQuery<'r>,
+{
+    param(
+        req,
+        NoArg {
+            field_name: arg.field_name,
         }
-    }
+        .into(),
+    )
+    .or_else(|_| query(req, arg))
+    .map_err(|_| DefaultError {
+        ty: std::any::type_name::<T>(),
+    })
 }
-
-impl<T> Has<Option<T>> for NoParam<T> {
-    fn get(&mut self) -> Option<T> {
-        None
-    }
-
-    fn field_name(&self) -> &'static str {
-        self.field_name
-    }
-}
-
-impl<T> Has<()> for NoParam<T> {
-    fn get(&mut self) -> () {}
-
-    fn field_name(&self) -> &'static str {
-        self.field_name
-    }
-}
-
-// pub fn default<'r, T>(
-//     req: &'r Request,
-//     mut param: impl Has<()>,
-// ) -> Result<T, ParamError<'r, T::Error>>
-// where
-//     T: FromParam<'r> + FromQuery<'r>,
-// {
-// }
 
 pub fn param<'r, T>(
     req: &'r Request,
-    mut param: impl Has<Option<&'static str>>,
+    param: OptionalArg<&'static str>,
 ) -> Result<T, ParamError<'r, T::Error>>
 where
     T: FromParam<'r>,
 {
-    let name = param.get().unwrap_or(param.field_name());
+    let name = param.val.unwrap_or(param.field_name);
     let params = req.extensions().get::<http::Params>().unwrap();
     let param = params.get(name).ok_or(ParamError { error: None, name })?;
     T::from_param(param).map_err(|e| ParamError {
@@ -102,7 +84,18 @@ where
     })
 }
 
-pub fn state<'r, T>(req: &'r Request, _: impl Has<()>) -> Result<&'r T, StateError>
+pub fn query<'r, T>(req: &'r Request, _: NoArg) -> Result<T, QueryError>
+where
+    T: FromQuery<'r>,
+{
+    let query = req.uri().query().unwrap_or_default();
+    serde_urlencoded::from_str(query).map_err(|error| QueryError {
+        error,
+        t: std::any::type_name::<T>(),
+    })
+}
+
+pub fn state<'r, T>(req: &'r Request, _: NoArg) -> Result<&'r T, StateError>
 where
     T: State,
 {
@@ -115,18 +108,19 @@ where
 
 pub struct StateError;
 
+#[derive(Debug)]
 pub struct ParamError<'r, E> {
     error: Option<E>,
     name: &'r str,
 }
 
-impl<'r, E> fmt::Debug for ParamError<'r, E>
+impl<'r, E> fmt::Display for ParamError<'r, E>
 where
-    E: fmt::Debug,
+    E: fmt::Display,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.error {
-            Some(err) => write!(f, "error extracting param '{}': {:?}", self.name, err),
+            Some(err) => write!(f, "error extracting param '{}': {}", self.name, err),
             None => write!(f, "param '{}' not found", self.name),
         }
     }
@@ -134,7 +128,7 @@ where
 
 impl<'r, E> ResponseError for ParamError<'r, E>
 where
-    E: fmt::Debug,
+    E: fmt::Debug + fmt::Display,
 {
     fn respond(&mut self) -> Response {
         ResponseBuilder::new()
@@ -158,8 +152,54 @@ impl<'r> FromParam<'r> for &'r str {
     }
 }
 
-// pub trait FromQuery<'r>: Sized {
-//     type Error: fmt::Debug;
-//
-//     fn from_param(param: &'r str) -> Result<Self, Self::Error>;
-// }
+pub trait FromQuery<'r>: serde::Deserialize<'r> {}
+impl<'r, T> FromQuery<'r> for T where T: serde::Deserialize<'r> {}
+
+#[derive(Debug)]
+pub struct QueryError {
+    error: serde_urlencoded::de::Error,
+    t: &'static str,
+}
+
+impl fmt::Display for QueryError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "failed to deserialize `{}` from query string: {}",
+            self.t, self.error,
+        )
+    }
+}
+
+impl ResponseError for QueryError {
+    fn respond(&mut self) -> Response {
+        ResponseBuilder::new()
+            .status(StatusCode::NOT_FOUND)
+            .body(Body::empty())
+            .unwrap()
+    }
+}
+
+#[derive(Debug)]
+pub struct DefaultError {
+    ty: &'static str,
+}
+
+impl fmt::Display for DefaultError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "failed to extract `{}` url parameter or query string",
+            self.ty
+        )
+    }
+}
+
+impl ResponseError for DefaultError {
+    fn respond(&mut self) -> Response {
+        ResponseBuilder::new()
+            .status(StatusCode::NOT_FOUND)
+            .body(Body::empty())
+            .unwrap()
+    }
+}
