@@ -51,9 +51,9 @@ impl NoArg {
     }
 }
 
-pub fn default<'r, T>(req: &'r Request, arg: NoArg) -> Result<T, DefaultError>
+pub fn default<'req, T>(req: &'req Request, arg: NoArg) -> Result<T, DefaultError>
 where
-    T: FromParam<'r> + FromQuery<'r>,
+    T: FromParam<'req> + FromQuery<'req>,
 {
     param(req, NoArg::new(arg.field_name).into())
         .or_else(|_| query(req, arg))
@@ -62,12 +62,12 @@ where
         })
 }
 
-pub fn param<'r, T>(
-    req: &'r Request,
+pub fn param<'req, T>(
+    req: &'req Request,
     param: OptionalArg<&'static str>,
-) -> Result<T, ParamError<'r, T::Error>>
+) -> Result<T, ParamError<'req, T::Error>>
 where
-    T: FromParam<'r>,
+    T: FromParam<'req>,
 {
     let name = param.value.unwrap_or(param.field_name);
     let params = req.extensions().get::<http::Params>().unwrap();
@@ -78,9 +78,9 @@ where
     })
 }
 
-pub fn query<'r, T>(req: &'r Request, _: NoArg) -> Result<T, QueryError>
+pub fn query<'req, T>(req: &'req Request, _: NoArg) -> Result<T, QueryError>
 where
-    T: FromQuery<'r>,
+    T: FromQuery<'req>,
 {
     let query = req.uri().query().unwrap_or_default();
     serde_urlencoded::from_str(query).map_err(|error| QueryError {
@@ -89,7 +89,7 @@ where
     })
 }
 
-pub fn state<'r, T>(req: &'r Request, _: NoArg) -> Result<&'r T, StateError>
+pub fn state<'req, T>(req: &'req Request, _: NoArg) -> Result<&'req T, StateError>
 where
     T: State,
 {
@@ -103,12 +103,12 @@ where
 pub struct StateError;
 
 #[derive(Debug)]
-pub struct ParamError<'r, E> {
+pub struct ParamError<'req, E> {
     error: Option<E>,
-    name: &'r str,
+    name: &'req str,
 }
 
-impl<'r, E> fmt::Display for ParamError<'r, E>
+impl<'req, E> fmt::Display for ParamError<'req, E>
 where
     E: fmt::Display,
 {
@@ -120,7 +120,7 @@ where
     }
 }
 
-impl<'r, E> ResponseError for ParamError<'r, E>
+impl<'req, E> ResponseError for ParamError<'req, E>
 where
     E: fmt::Debug + fmt::Display,
 {
@@ -132,22 +132,22 @@ where
     }
 }
 
-pub trait FromParam<'r>: Sized {
+pub trait FromParam<'req>: Sized {
     type Error: fmt::Debug;
 
-    fn from_param(param: &'r str) -> Result<Self, Self::Error>;
+    fn from_param(param: &'req str) -> Result<Self, Self::Error>;
 }
 
-impl<'r> FromParam<'r> for &'r str {
+impl<'req> FromParam<'req> for &'req str {
     type Error = Infallible;
 
-    fn from_param(param: &'r str) -> Result<Self, Self::Error> {
+    fn from_param(param: &'req str) -> Result<Self, Self::Error> {
         Ok(param)
     }
 }
 
-pub trait FromQuery<'r>: serde::Deserialize<'r> {}
-impl<'r, T> FromQuery<'r> for T where T: serde::Deserialize<'r> {}
+pub trait FromQuery<'req>: serde::Deserialize<'req> {}
+impl<'req, T> FromQuery<'req> for T where T: serde::Deserialize<'req> {}
 
 #[derive(Debug)]
 pub struct QueryError {

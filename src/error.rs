@@ -26,41 +26,37 @@ impl<'a> ResponseError for Box<dyn ResponseError + 'a> {
     }
 }
 
-pub struct Error<'r> {
-    inner: Box<dyn ResponseError + 'r>,
+pub struct Error<'req> {
+    inner: Box<dyn ResponseError + 'req>,
 }
 
-impl<'r> fmt::Debug for Error<'r> {
+impl<'req> fmt::Debug for Error<'req> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:?}", self.inner)
     }
 }
 
-impl<'r> fmt::Display for Error<'r> {
+impl<'req> fmt::Display for Error<'req> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.inner)
     }
 }
 
-impl<'r> Error<'r> {
-    pub fn new(err: impl ResponseError + 'r) -> Self {
+impl<'req> Error<'req> {
+    pub fn new(err: impl ResponseError + 'req) -> Self {
         Self {
             inner: Box::new(err),
         }
     }
 
-    pub fn as_mut(&mut self) -> &mut (impl ResponseError + 'r) {
-        &mut self.inner
-    }
-
-    pub fn into_response_error(self) -> impl ResponseError + 'r {
-        self.inner
+    pub fn respond(mut self) -> Response {
+        self.inner.respond()
     }
 }
 
-impl<'r, E> From<E> for Error<'r>
+impl<'req, E> From<E> for Error<'req>
 where
-    E: ResponseError + 'r,
+    E: ResponseError + 'req,
 {
     fn from(err: E) -> Self {
         Self {
@@ -69,21 +65,21 @@ where
     }
 }
 
-pub trait IntoResponseError<'r> {
-    fn into_response_error(self) -> Error<'r>;
+pub trait IntoResponseError<'req> {
+    fn into_response_error(self) -> Error<'req>;
 }
 
-impl<'r, E> IntoResponseError<'r> for E
+impl<'req, E> IntoResponseError<'req> for E
 where
-    E: ResponseError + 'r,
+    E: ResponseError + 'req,
 {
-    fn into_response_error(self) -> Error<'r> {
+    fn into_response_error(self) -> Error<'req> {
         self.into()
     }
 }
 
-impl<'r> IntoResponseError<'r> for Error<'r> {
-    fn into_response_error(self) -> Error<'r> {
+impl<'req> IntoResponseError<'req> for Error<'req> {
+    fn into_response_error(self) -> Error<'req> {
         self
     }
 }

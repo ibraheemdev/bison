@@ -1,34 +1,34 @@
 use crate::http::Request;
 use crate::{bounded, Error};
 
-pub trait Context<'r>: bounded::Send + bounded::Sync + Sized {
-    fn extract(req: &'r Request) -> bounded::BoxFuture<'r, Result<Self, Error>>;
+pub trait Context<'req>: bounded::Send + bounded::Sync + Sized {
+    fn extract(req: &'req Request) -> bounded::BoxFuture<'req, Result<Self, Error>>;
 }
 
-pub trait WithContext<'r> {
-    type Context: Context<'r>;
+pub trait WithContext<'req> {
+    type Context: Context<'req>;
 }
 
-impl<'r> Context<'r> for &'r Request {
-    fn extract(req: &'r Request) -> bounded::BoxFuture<'r, Result<Self, Error>> {
+impl<'req> Context<'req> for &'req Request {
+    fn extract(req: &'req Request) -> bounded::BoxFuture<'req, Result<Self, Error>> {
         Box::pin(async move { Ok(req) })
     }
 }
 
-impl<'r> Context<'r> for () {
-    fn extract(_: &'r Request) -> bounded::BoxFuture<'r, Result<Self, Error>> {
+impl<'req> Context<'req> for () {
+    fn extract(_: &'req Request) -> bounded::BoxFuture<'req, Result<Self, Error>> {
         Box::pin(async move { Ok(()) })
     }
 }
 
-impl<'r> WithContext<'r> for () {
+impl<'req> WithContext<'req> for () {
     type Context = ();
 }
 
-impl<'r, T: WithContext<'r>> WithContext<'r> for (T,) {
+impl<'req, T: WithContext<'req>> WithContext<'req> for (T,) {
     type Context = T::Context;
 }
 
-impl<'any, 'r> WithContext<'r> for &'any Request {
-    type Context = &'r Request;
+impl<'any, 'req> WithContext<'req> for &'any Request {
+    type Context = &'req Request;
 }

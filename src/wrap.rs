@@ -1,17 +1,18 @@
 use crate::error::IntoResponseError;
 use crate::handler::ErasedHandler;
 use crate::http::{Request, Response};
-use crate::{bounded, Error};
+use crate::{bounded, Error, Responder};
 
 #[crate::async_trait]
 pub trait Wrap<'r>: bounded::Send + bounded::Sync {
     type Error: IntoResponseError<'r>;
+    type Response: Responder<'r>;
 
     async fn call(
         &self,
         req: &'r Request,
         next: impl Next<'r>,
-    ) -> Result<Response, Self::Error>
+    ) -> Result<Self::Response, Self::Error>
     where
         'async_trait: 'r;
 }
@@ -33,12 +34,9 @@ impl Call {
 #[crate::async_trait]
 impl<'r> Wrap<'r> for Call {
     type Error = Error<'r>;
+    type Response = Response;
 
-    async fn call(
-        &self,
-        req: &'r Request,
-        next: impl Next<'r>,
-    ) -> Result<Response, Self::Error> {
+    async fn call(&self, req: &'r Request, next: impl Next<'r>) -> Result<Response, Self::Error> {
         next.call(req).await
     }
 }
@@ -55,8 +53,9 @@ where
     O: Wrap<'r>,
 {
     type Error = O::Error;
+    type Response = O::Response;
 
-    async fn call(&self, req: &'r Request, next: impl Next<'r>) -> Result<Response, Self::Error>
+    async fn call(&self, req: &'r Request, next: impl Next<'r>) -> Result<O::Response, Self::Error>
     where
         'async_trait: 'r,
     {
@@ -82,6 +81,7 @@ where
         self.outer
             .call(req, self.inner)
             .await
+            .map(|r| r.respond(req))
             .map_err(IntoResponseError::into_response_error)
     }
 }

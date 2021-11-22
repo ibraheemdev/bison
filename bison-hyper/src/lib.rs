@@ -61,7 +61,7 @@ impl http_body::Body for BisonHttpBody {
 
 pub fn make<W>(bison: Bison<W>) -> BisonMakeService<W>
 where
-    for<'r> W: bison::Wrap<'r> + 'static,
+    for<'req> W: bison::Wrap<'req> + 'static,
 {
     BisonMakeService {
         service: BisonService {
@@ -72,7 +72,7 @@ where
 
 impl<W> Service<hyper::Request<hyper::Body>> for BisonService<W>
 where
-    W: for<'r> bison::Wrap<'r> + 'static,
+    W: for<'req> bison::Wrap<'req> + 'static,
 {
     type Response = hyper::Response<BisonHttpBody>;
     type Error = Infallible;

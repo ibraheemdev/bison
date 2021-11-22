@@ -1,44 +1,42 @@
-use crate::bounded;
-use crate::context::WithContext;
-use crate::error::{Error, IntoResponseError};
 use crate::http::{Request, Response};
+use crate::{bounded, Error, Responder, WithContext};
 
 use std::future::Future;
 
-pub trait Handler<'r, C>: Clone + bounded::Send + bounded::Sync + 'static
+pub trait Handler<'req, C>: Clone + bounded::Send + bounded::Sync + 'static
 where
-    C: WithContext<'r>,
+    C: WithContext<'req>,
 {
-    type Error: IntoResponseError<'r>;
+    type Response: Responder<'req>;
 
-    fn call(&self, req: C::Context) -> bounded::BoxFuture<'r, Result<Response, Self::Error>>;
+    fn call(&self, req: C::Context) -> bounded::BoxFuture<'req, Self::Response>;
 }
 
-impl<'r, F, O, E> Handler<'r, ()> for F
+impl<'req, F, O, R> Handler<'req, ()> for F
 where
     F: Fn() -> O + bounded::Send + bounded::Sync + Clone + 'static,
-    O: Future<Output = Result<Response, E>> + bounded::Send + bounded::Sync + 'r,
-    E: IntoResponseError<'r>,
+    O: Future<Output = R> + bounded::Send + bounded::Sync + 'req,
+    R: Responder<'req>,
 {
-    type Error = E;
+    type Response = R;
 
-    fn call(&self, _: ()) -> bounded::BoxFuture<'r, Result<Response, Self::Error>> {
+    fn call(&self, _: ()) -> bounded::BoxFuture<'req, Self::Response> {
         Box::pin(self())
     }
 }
 
-impl<'r, F, C, O, E> Handler<'r, (C,)> for F
+impl<'req, F, C, O, R> Handler<'req, (C,)> for F
 where
     // https://github.com/rust-lang/rust/issues/90875
     F: FnArgs<C>,
     F: Fn(C::Context) -> O + bounded::Send + bounded::Sync + Clone + 'static,
-    O: Future<Output = Result<Response, E>> + bounded::Send + bounded::Sync + 'r,
-    E: IntoResponseError<'r>,
-    C: WithContext<'r>,
+    O: Future<Output = R> + bounded::Send + bounded::Sync + 'req,
+    R: Responder<'req>,
+    C: WithContext<'req>,
 {
-    type Error = E;
+    type Response = R;
 
-    fn call(&self, req: C::Context) -> bounded::BoxFuture<'r, Result<Response, Self::Error>> {
+    fn call(&self, req: C::Context) -> bounded::BoxFuture<'req, Self::Response> {
         Box::pin(self(req))
     }
 }
@@ -50,23 +48,29 @@ pub struct HandlerFn<F> {
 impl<F> HandlerFn<F> {
     pub fn new(f: F) -> Self
     where
-        F: for<'r> Fn(&'r Request) -> bounded::BoxFuture<'r, Result<Response, Error>>,
+        F: for<'req> Fn(&'req Request) -> bounded::BoxFuture<'req, Result<Response, Error>>,
     {
         Self { f }
     }
 }
 
 pub trait ErasedHandler: bounded::Send + bounded::Sync {
-    fn call<'r>(&'r self, req: &'r Request) -> bounded::BoxFuture<'r, Result<Response, Error>>;
+    fn call<'req>(
+        &'req self,
+        req: &'req Request,
+    ) -> bounded::BoxFuture<'req, Result<Response, Error>>;
 }
 
 impl<F> ErasedHandler for HandlerFn<F>
 where
-    F: for<'r> Fn(&'r Request) -> bounded::BoxFuture<'r, Result<Response, Error>>
+    F: for<'req> Fn(&'req Request) -> bounded::BoxFuture<'req, Result<Response, Error>>
         + bounded::Send
         + bounded::Sync,
 {
-    fn call<'r>(&'r self, req: &'r Request) -> bounded::BoxFuture<'r, Result<Response, Error>> {
+    fn call<'req>(
+        &'req self,
+        req: &'req Request,
+    ) -> bounded::BoxFuture<'req, Result<Response, Error>> {
         let fut = (self.f)(req);
         Box::pin(async move { fut.await })
     }

@@ -1,7 +1,5 @@
-use std::convert::Infallible;
 use std::net::SocketAddr;
 
-use bison::http::{Body, Response};
 use bison::{Bison, Context};
 use bison_hyper::{make, Server};
 
@@ -11,9 +9,8 @@ struct Hello<'req> {
     age: &'req str,
 }
 
-async fn hello(cx: Hello<'_>) -> Result<Response, Infallible> {
-    let b = format!("Hello, {} year old named {}!", cx.age, cx.name);
-    Ok(Response::new(Body::once(b)))
+async fn hello(cx: Hello<'_>) -> String {
+    format!("Hello, {} year old named {}!", cx.age, cx.name)
 }
 
 #[tokio::main]

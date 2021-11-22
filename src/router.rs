@@ -1,8 +1,8 @@
-use crate::context::{Context, WithContext};
-use crate::error::{IntoResponseError, ResponseError};
+use crate::error::IntoResponseError;
 use crate::handler::{ErasedHandler, Handler, HandlerFn};
 use crate::http::{header, Body, Method, Params, Request, Response, ResponseBuilder, StatusCode};
 use crate::wrap::{And, Call, DynNext, Wrap};
+use crate::{Context, Responder, WithContext};
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -25,9 +25,9 @@ impl Router<Call> {
 
 impl<W> Router<W>
 where
-    W: for<'r> Wrap<'r>,
+    W: for<'req> Wrap<'req>,
 {
-    pub(crate) fn wrap(self, wrap: impl for<'r> Wrap<'r>) -> Router<impl for<'r> Wrap<'r>> {
+    pub(crate) fn wrap(self, wrap: impl for<'req> Wrap<'req>) -> Router<impl for<'req> Wrap<'req>> {
         Router {
             wrap: And {
                 inner: self.wrap,
@@ -45,18 +45,15 @@ where
     ) -> Result<Self, matchit::InsertError>
     where
         P: Into<String>,
-        H: for<'r> Handler<'r, C>,
-        C: for<'r> WithContext<'r>,
+        H: for<'req> Handler<'req, C>,
+        C: for<'req> WithContext<'req>,
     {
         let handler = HandlerFn::new({
             move |req| {
                 let handler = handler.clone();
                 Box::pin(async move {
                     let context = C::Context::extract(req).await?;
-                    handler
-                        .call(context)
-                        .await
-                        .map_err(IntoResponseError::into_response_error)
+                    Ok(handler.call(context).await.respond(req))
                 })
             }
         });
@@ -116,8 +113,8 @@ where
                         .collect::<Vec<_>>();
                     req.extensions_mut().insert(Params(params));
                     match self.wrap.call(&req, DynNext::new(&*handler.clone())).await {
-                        Ok(ok) => ok,
-                        Err(err) => err.into_response_error().as_mut().respond(),
+                        Ok(ok) => ok.respond(&req),
+                        Err(err) => err.into_response_error().respond(),
                     }
                 }
                 Err(e) if e.tsr() && req.method() != Method::CONNECT && path != "/" => {
