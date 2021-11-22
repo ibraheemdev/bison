@@ -1,25 +1,53 @@
 use crate::context::WithContext;
+use crate::error::IntoResponseError;
 use crate::http::{Request, Response};
 use crate::{bounded, Error};
 
 use std::pin::Pin;
 
-pub trait Handler<'req, C>: Clone + bounded::Send + bounded::Sync + 'static
+pub trait Handler<'r, C>: Clone + bounded::Send + bounded::Sync + 'static
 where
-    C: WithContext<'req>,
+    C: WithContext<'r>,
 {
-    fn call(&self, req: C::Context) -> Pin<Box<dyn bounded::Future<Output = Response> + 'req>>;
+    type Error: IntoResponseError<'r>;
+
+    fn call(
+        &self,
+        req: C::Context,
+    ) -> Pin<Box<dyn bounded::Future<Output = Result<Response, Self::Error>> + 'r>>;
 }
 
-impl<'req, F, O, C> Handler<'req, C> for F
+impl<'r, F, O, E> Handler<'r, ()> for F
+where
+    F: Fn() -> O + bounded::Send + bounded::Sync + Clone + 'static,
+    O: bounded::Future<Output = Result<Response, E>> + 'r,
+    E: IntoResponseError<'r>,
+{
+    type Error = E;
+
+    fn call(
+        &self,
+        _: (),
+    ) -> Pin<Box<dyn bounded::Future<Output = Result<Response, Self::Error>> + 'r>> {
+        Box::pin(self())
+    }
+}
+
+impl<'r, F, C, O, E> Handler<'r, (C,)> for F
 where
     // https://github.com/rust-lang/rust/issues/90875
     F: FnArgs<C>,
     F: Fn(C::Context) -> O + bounded::Send + bounded::Sync + Clone + 'static,
-    O: bounded::Future<Output = Response> + 'req,
-    C: WithContext<'req>,
+    O: bounded::Future<Output = Result<Response, E>> + 'r,
+    E: IntoResponseError<'r>,
+    C: WithContext<'r>,
 {
-    fn call(&self, req: C::Context) -> Pin<Box<dyn bounded::Future<Output = Response> + 'req>> {
+    type Error = E;
+
+    fn call(
+        &self,
+        req: C::Context,
+    ) -> Pin<Box<dyn bounded::Future<Output = Result<Response, Self::Error>> + 'r>> {
         Box::pin(self(req))
     }
 }
@@ -31,31 +59,36 @@ pub struct HandlerFn<F> {
 impl<F> HandlerFn<F> {
     pub fn new(f: F) -> Self
     where
-        F: for<'req> Fn(&'req Request) -> Pin<Box<dyn bounded::Future<Output = Response> + 'req>>,
+        F: for<'r> Fn(
+            &'r Request,
+        )
+            -> Pin<Box<dyn bounded::Future<Output = Result<Response, Error>> + 'r>>,
     {
         Self { f }
     }
 }
 
 pub trait ErasedHandler: bounded::Send + bounded::Sync {
-    fn call<'req>(
-        &self,
-        req: &'req Request,
-    ) -> Pin<Box<dyn bounded::Future<Output = Result<Response, Error>> + 'req>>;
+    fn call<'r>(
+        &'r self,
+        req: &'r Request,
+    ) -> Pin<Box<dyn bounded::Future<Output = Result<Response, Error>> + 'r>>;
 }
 
 impl<F> ErasedHandler for HandlerFn<F>
 where
-    F: for<'req> Fn(&'req Request) -> Pin<Box<dyn bounded::Future<Output = Response> + 'req>>
+    F: for<'r> Fn(
+            &'r Request,
+        ) -> Pin<Box<dyn bounded::Future<Output = Result<Response, Error>> + 'r>>
         + bounded::Send
         + bounded::Sync,
 {
-    fn call<'req>(
-        &self,
-        req: &'req Request,
-    ) -> Pin<Box<dyn bounded::Future<Output = Result<Response, Error>> + 'req>> {
+    fn call<'r>(
+        &'r self,
+        req: &'r Request,
+    ) -> Pin<Box<dyn bounded::Future<Output = Result<Response, Error>> + 'r>> {
         let fut = (self.f)(req);
-        Box::pin(async move { Ok(fut.await) })
+        Box::pin(async move { fut.await })
     }
 }
 

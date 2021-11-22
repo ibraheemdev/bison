@@ -25,9 +25,9 @@ impl Router<Call> {
 
 impl<W> Router<W>
 where
-    W: for<'req> Wrap<'req>,
+    W: for<'r> Wrap<'r>,
 {
-    pub(crate) fn wrap(self, wrap: impl for<'req> Wrap<'req>) -> Router<impl for<'req> Wrap<'req>> {
+    pub(crate) fn wrap(self, wrap: impl for<'r> Wrap<'r>) -> Router<impl for<'r> Wrap<'r>> {
         Router {
             wrap: And {
                 inner: self.wrap,
@@ -45,15 +45,18 @@ where
     ) -> Result<Self, matchit::InsertError>
     where
         P: Into<String>,
-        H: for<'req> Handler<'req, C>,
-        C: for<'req> WithContext<'req>,
+        H: for<'r> Handler<'r, C>,
+        C: for<'r> WithContext<'r>,
     {
         let handler = HandlerFn::new({
             move |req| {
                 let handler = handler.clone();
                 Box::pin(async move {
-                    let context = C::Context::extract(req).await;
-                    handler.call(context).await
+                    let context = C::Context::extract(req).await?;
+                    handler
+                        .call(context)
+                        .await
+                        .map_err(IntoResponseError::into_response_error)
                 })
             }
         });
