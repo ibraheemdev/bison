@@ -1,17 +1,16 @@
 use crate::error::IntoResponseError;
-use crate::handler::{ErasedHandler, Handler, HandlerFn};
+use crate::handler::{self, ErasedHandler, Handler};
 use crate::http::{header, Body, Method, Params, Request, Response, ResponseBuilder, StatusCode};
 use crate::wrap::{And, Call, DynNext, Wrap};
-use crate::{Context, Responder, WithContext};
+use crate::{Responder, WithContext};
 
 use std::collections::HashMap;
-use std::sync::Arc;
 
 use matchit::Node;
 
 pub struct Router<W> {
     wrap: W,
-    routes: HashMap<Method, Node<Arc<dyn ErasedHandler>>>,
+    routes: HashMap<Method, Node<Box<ErasedHandler>>>,
 }
 
 impl Router<Call> {
@@ -25,9 +24,9 @@ impl Router<Call> {
 
 impl<W> Router<W>
 where
-    W: for<'req> Wrap<'req>,
+    W: Wrap,
 {
-    pub(crate) fn wrap(self, wrap: impl for<'req> Wrap<'req>) -> Router<impl for<'req> Wrap<'req>> {
+    pub(crate) fn wrap(self, wrap: impl Wrap) -> Router<impl Wrap> {
         Router {
             wrap: And {
                 inner: self.wrap,
@@ -45,23 +44,13 @@ where
     ) -> Result<Self, matchit::InsertError>
     where
         P: Into<String>,
-        H: for<'req> Handler<'req, C>,
+        H: for<'req> Handler<'req, C> + 'static,
         C: for<'req> WithContext<'req>,
     {
-        let handler = HandlerFn::new({
-            move |req| {
-                let handler = handler.clone();
-                Box::pin(async move {
-                    let context = C::Context::extract(req).await?;
-                    Ok(handler.call(context).await.respond(req))
-                })
-            }
-        });
-
         self.routes
             .entry(method)
             .or_default()
-            .insert(path, Arc::new(handler))?;
+            .insert(path, handler::erase(handler))?;
 
         Ok(self)
     }
@@ -112,7 +101,7 @@ where
                         .map(|(k, v)| (k.to_owned(), v.to_owned()))
                         .collect::<Vec<_>>();
                     req.extensions_mut().insert(Params(params));
-                    match self.wrap.call(&req, DynNext::new(&*handler.clone())).await {
+                    match self.wrap.call(&req, DynNext::new(&**handler)).await {
                         Ok(ok) => ok.respond(&req),
                         Err(err) => err.into_response_error().respond(),
                     }

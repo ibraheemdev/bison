@@ -1,31 +1,37 @@
-use crate::error::IntoResponseError;
+use crate::error::{Error, IntoResponseError};
+use crate::handler::HandlerError;
 use crate::http::{Body, Request, Response};
 
-pub trait Responder<'req> {
-    fn respond(self, req: &'req Request) -> Response;
+pub trait Responder {
+    fn respond(self, req: &Request) -> Response;
 }
 
-impl<'req> Responder<'req> for Response {
-    fn respond(self, _: &'req Request) -> Response {
+impl Responder for Response {
+    fn respond(self, _: &Request) -> Response {
         self
     }
 }
 
-impl<'req> Responder<'req> for String {
-    fn respond(self, _: &'req Request) -> Response {
+impl Responder for String {
+    fn respond(self, _: &Request) -> Response {
         Response::new(Body::once(self))
     }
 }
 
-impl<'req, T, E> Responder<'req> for Result<T, E>
+impl<T, E> Responder for Result<T, E>
 where
-    T: Responder<'req>,
-    E: IntoResponseError<'req>,
+    T: Responder,
+    E: IntoResponseError,
 {
-    fn respond(self, req: &'req Request) -> Response {
+    fn respond(self, req: &Request) -> Response {
         match self {
             Ok(ok) => ok.respond(req),
-            Err(err) => err.into_response_error().respond(),
+            Err(err) => {
+                let mut err = Error::from(err.into_response_error());
+                let mut response = err.respond();
+                response.extensions_mut().insert(HandlerError(Some(err)));
+                response
+            }
         }
     }
 }

@@ -2,6 +2,7 @@ use crate::context::WithContext;
 use crate::handler::Handler;
 use crate::http::{Method, Request, Response};
 use crate::router::Router;
+use crate::scope::Scope;
 use crate::state::{self, State};
 use crate::wrap::{Call, Wrap};
 
@@ -36,7 +37,7 @@ impl Bison<Call> {
     ///
     /// let bison = Bison::new();
     /// ```
-    pub fn new() -> Bison<impl for<'r> Wrap<'r>> {
+    pub fn new() -> Bison<impl Wrap> {
         Self {
             router: Router::new(),
             state: state::Map::new(),
@@ -46,8 +47,22 @@ impl Bison<Call> {
 
 impl<W> Bison<W>
 where
-    W: for<'r> Wrap<'r>,
+    W: Wrap,
 {
+    pub fn route<H, C>(self, path: &str, method: Method, handler: H) -> Self
+    where
+        H: for<'r> Handler<'r, C> + 'static,
+        C: for<'r> WithContext<'r>,
+    {
+        Bison {
+            router: self
+                .router
+                .route(method, path, handler)
+                .expect("failed to insert route"),
+            state: self.state,
+        }
+    }
+
     /// Insert a route for the `GET` method.
     ///
     /// # Examples
@@ -61,9 +76,9 @@ where
     ///
     /// let bison = Bison::new().get("/", home);
     /// ```
-    pub fn get<H, C>(self, path: &str, handler: H) -> Bison<impl for<'r> Wrap<'r>>
+    pub fn get<H, C>(self, path: &str, handler: H) -> Bison<impl Wrap>
     where
-        H: for<'r> Handler<'r, C>,
+        H: for<'r> Handler<'r, C> + 'static,
         C: for<'r> WithContext<'r>,
     {
         let router = self
@@ -125,11 +140,20 @@ where
         }
     }
 
-    pub fn wrap<O>(self, wrap: impl for<'r> Wrap<'r>) -> Bison<impl for<'r> Wrap<'r>> {
+    pub fn wrap(self, wrap: impl Wrap) -> Bison<impl Wrap> {
         Bison {
             router: self.router.wrap(wrap),
             state: self.state,
         }
+    }
+
+    pub fn scope<F, O>(self, prefix: &str, f: F) -> Bison<impl Wrap>
+    where
+        F: FnOnce(Scope<Call>) -> Scope<O>,
+        O: Wrap,
+    {
+        let scope = f(Scope::new(prefix));
+        scope.register(self)
     }
 
     /// Serve a single HTTP request.
@@ -147,20 +171,12 @@ macro_rules! route {
     ($name:ident => $method:ident) => {
         #[doc = concat!("Insert a route for the `", stringify!($method), "` method.")]
         /// See [`get`](Self::get) for examples.
-        pub fn $name<H, C>(self, path: &str, handler: H) -> Bison<impl for<'r> Wrap<'r>>
+        pub fn $name<H, C>(self, path: &str, handler: H) -> Bison<impl Wrap>
         where
-            H: for<'r> Handler<'r, C>,
+            H: for<'r> Handler<'r, C> + 'static,
             C: for<'r> WithContext<'r>,
         {
-            let router = self
-                .router
-                .route(Method::$method, path, handler)
-                .expect("failed to insert route");
-
-            Bison {
-                router,
-                state: self.state,
-            }
+            self.route(path, Method::$method, handler)
         }
     };
 }

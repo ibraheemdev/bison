@@ -180,3 +180,29 @@ fn bad_extractor(tokens: impl ToTokens) -> Error {
         "expected #[cx(extractor)] or #[cx(extractor = ...)]",
     )
 }
+
+#[proc_macro_attribute]
+pub fn async_trait_not_send_internal(
+    _: proc_macro::TokenStream,
+    input: proc_macro::TokenStream,
+) -> proc_macro::TokenStream {
+    let input = proc_macro2::TokenStream::from(input);
+    let out = quote! {
+        #[::async_trait::async_trait(?Send)]
+        #input
+    };
+    out.into()
+}
+
+#[proc_macro_attribute]
+pub fn async_trait_not_send(
+    _: proc_macro::TokenStream,
+    input: proc_macro::TokenStream,
+) -> proc_macro::TokenStream {
+    let input = proc_macro2::TokenStream::from(input);
+    let out = quote! {
+        #[::bison::async_trait(?Send)]
+        #input
+    };
+    out.into()
+}

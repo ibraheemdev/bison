@@ -65,16 +65,19 @@ where
 pub fn param<'req, T>(
     req: &'req Request,
     param: OptionalArg<&'static str>,
-) -> Result<T, ParamError<'req, T::Error>>
+) -> Result<T, ParamError<T::Error>>
 where
     T: FromParam<'req>,
 {
     let name = param.value.unwrap_or(param.field_name);
     let params = req.extensions().get::<http::Params>().unwrap();
-    let param = params.get(name).ok_or(ParamError { error: None, name })?;
+    let param = params.get(name).ok_or(ParamError {
+        error: None,
+        name: name.to_owned(),
+    })?;
     T::from_param(param).map_err(|e| ParamError {
         error: Some(e),
-        name,
+        name: name.to_owned(),
     })
 }
 
@@ -103,12 +106,12 @@ where
 pub struct StateError;
 
 #[derive(Debug)]
-pub struct ParamError<'req, E> {
+pub struct ParamError<E> {
     error: Option<E>,
-    name: &'req str,
+    name: String,
 }
 
-impl<'req, E> fmt::Display for ParamError<'req, E>
+impl<E> fmt::Display for ParamError<E>
 where
     E: fmt::Display,
 {
@@ -120,9 +123,9 @@ where
     }
 }
 
-impl<'req, E> ResponseError for ParamError<'req, E>
+impl<E> ResponseError for ParamError<E>
 where
-    E: fmt::Debug + fmt::Display,
+    E: fmt::Debug + fmt::Display + Send + Sync,
 {
     fn respond(&mut self) -> Response {
         ResponseBuilder::new()

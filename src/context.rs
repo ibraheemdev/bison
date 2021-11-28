@@ -6,7 +6,7 @@ pub trait Context<'req>: bounded::Send + bounded::Sync + Sized {
 }
 
 pub trait WithContext<'req> {
-    type Context: Context<'req>;
+    type Context: Context<'req> + 'req;
 }
 
 impl<'req> Context<'req> for &'req Request {

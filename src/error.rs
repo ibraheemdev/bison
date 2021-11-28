@@ -3,7 +3,7 @@ use crate::http::Response;
 use std::convert::Infallible;
 use std::fmt::{self, Debug, Display};
 
-pub trait ResponseError: Debug + Display {
+pub trait ResponseError: Debug + Display + Send + Sync {
     fn respond(&mut self) -> Response;
 }
 
@@ -26,37 +26,37 @@ impl<'a> ResponseError for Box<dyn ResponseError + 'a> {
     }
 }
 
-pub struct Error<'req> {
-    inner: Box<dyn ResponseError + 'req>,
+pub struct Error {
+    inner: Box<dyn ResponseError>,
 }
 
-impl<'req> fmt::Debug for Error<'req> {
+impl fmt::Debug for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:?}", self.inner)
     }
 }
 
-impl<'req> fmt::Display for Error<'req> {
+impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.inner)
     }
 }
 
-impl<'req> Error<'req> {
-    pub fn new(err: impl ResponseError + 'req) -> Self {
+impl Error {
+    pub fn new(err: impl ResponseError + 'static) -> Self {
         Self {
             inner: Box::new(err),
         }
     }
 
-    pub fn respond(mut self) -> Response {
+    pub fn respond(&mut self) -> Response {
         self.inner.respond()
     }
 }
 
-impl<'req, E> From<E> for Error<'req>
+impl<E> From<E> for Error
 where
-    E: ResponseError + 'req,
+    E: ResponseError + 'static,
 {
     fn from(err: E) -> Self {
         Self {
@@ -65,21 +65,21 @@ where
     }
 }
 
-pub trait IntoResponseError<'req> {
-    fn into_response_error(self) -> Error<'req>;
+pub trait IntoResponseError {
+    fn into_response_error(self) -> Error;
 }
 
-impl<'req, E> IntoResponseError<'req> for E
+impl<E> IntoResponseError for E
 where
-    E: ResponseError + 'req,
+    E: ResponseError + 'static,
 {
-    fn into_response_error(self) -> Error<'req> {
+    fn into_response_error(self) -> Error {
         self.into()
     }
 }
 
-impl<'req> IntoResponseError<'req> for Error<'req> {
-    fn into_response_error(self) -> Error<'req> {
+impl IntoResponseError for Error {
+    fn into_response_error(self) -> Error {
         self
     }
 }
