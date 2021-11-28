@@ -52,7 +52,7 @@ where
     pub fn route<H, C>(self, path: &str, method: Method, handler: H) -> Self
     where
         H: for<'r> Handler<'r, C> + 'static,
-        C: for<'r> WithContext<'r>,
+        C: for<'r> WithContext<'r> + 'static,
     {
         Bison {
             router: self
@@ -79,7 +79,7 @@ where
     pub fn get<H, C>(self, path: &str, handler: H) -> Bison<impl Wrap>
     where
         H: for<'r> Handler<'r, C> + 'static,
-        C: for<'r> WithContext<'r>,
+        C: for<'r> WithContext<'r> + 'static,
     {
         let router = self
             .router
@@ -174,7 +174,7 @@ macro_rules! route {
         pub fn $name<H, C>(self, path: &str, handler: H) -> Bison<impl Wrap>
         where
             H: for<'r> Handler<'r, C> + 'static,
-            C: for<'r> WithContext<'r>,
+            C: for<'r> WithContext<'r> + 'static,
         {
             self.route(path, Method::$method, handler)
         }

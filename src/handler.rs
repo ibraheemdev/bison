@@ -6,7 +6,10 @@ use std::future::Future;
 use std::marker::PhantomData;
 
 #[crate::async_trait_internal]
-pub trait Handler<'req, C: WithContext<'req>>: bounded::Send + bounded::Sync {
+pub trait Handler<'req, C>: bounded::Send + bounded::Sync
+where
+    C: WithContext<'req>,
+{
     type Response: Responder;
 
     async fn call(&self, req: C::Context) -> Self::Response
@@ -18,7 +21,7 @@ pub trait HandlerExt<C>: for<'req> Handler<'req, C> + 'static
 where
     C: for<'req> WithContext<'req>,
 {
-    fn wrap<W>(self, wrap: W) -> Wrapped<C, W>
+    fn wrap<W>(self, wrap: W) -> Wrapped<Self, C, W>
     where
         W: Wrap,
         Self: Sized,
@@ -38,7 +41,7 @@ where
 {
 }
 
-impl<'req, 'any> Handler<'req, &'any Request> for Box<ErasedHandler> {
+impl<'req, 'any> Handler<'req, &'any Request> for Box<Erased> {
     type Response = Response;
 
     fn call<'a, 'o>(&'a self, req: &'req Request) -> bounded::BoxFuture<'o, Response>
@@ -50,22 +53,23 @@ impl<'req, 'any> Handler<'req, &'any Request> for Box<ErasedHandler> {
     }
 }
 
-pub struct Wrapped<C, W> {
+pub struct Wrapped<H, C, W> {
     wrap: W,
-    handler: Box<ErasedHandler>,
+    handler: Erase<H, C>,
     _cx: PhantomData<C>,
 }
 
 #[crate::async_trait_internal]
-impl<'req, 'any, C, W> Handler<'req, &'any Request> for Wrapped<C, W>
+impl<'req, 'any, H, C, W> Handler<'req, &'any Request> for Wrapped<H, C, W>
 where
     W: Wrap,
-    C: WithContext<'req> + bounded::Send + bounded::Sync,
+    H: for<'r> Handler<'r, C> + 'static,
+    C: for<'r> WithContext<'r> + bounded::Send + bounded::Sync,
 {
     type Response = Response;
 
     async fn call(&self, req: &'req Request) -> Self::Response {
-        match self.wrap.call(req, wrap::DynNext(&*self.handler)).await {
+        match self.wrap.call(req, &self.handler).await {
             Ok(response) => response,
             Err(err) => {
                 let mut err = Error::from(err.into_response_error());
@@ -110,60 +114,61 @@ where
     }
 }
 
-pub struct HandlerFn<F, H> {
+pub struct HandlerError(pub Option<Error>);
+
+pub type Erased = dyn for<'req> Handler<'req, &'req Request, Response = Response>;
+
+pub struct Erase<H, C> {
     handler: H,
-    f: F,
+    _cx: PhantomData<C>,
 }
 
-impl<H, F> HandlerFn<F, H> {
-    pub fn new(handler: H, f: F) -> Self
-    where
-        F: for<'req> Fn(&'req H, &'req Request) -> bounded::BoxFuture<'req, Response>,
-        H: bounded::Send + bounded::Sync,
-    {
-        Self { handler, f }
+pub fn erase<H, C>(handler: H) -> Erase<H, C>
+where
+    H: for<'r> Handler<'r, C>,
+    C: for<'r> WithContext<'r>,
+{
+    Erase {
+        handler,
+        _cx: PhantomData,
     }
 }
 
 #[crate::async_trait_internal]
-impl<'req, F, H> Handler<'req, &'req Request> for HandlerFn<F, H>
+impl<H, C> wrap::Next for Erase<H, C>
 where
-    F: for<'r> Fn(&'r H, &'r Request) -> bounded::BoxFuture<'r, Response>
-        + bounded::Send
-        + bounded::Sync
-        + 'static,
-    H: bounded::Send + bounded::Sync,
+    H: for<'r> Handler<'r, C>,
+    C: for<'r> WithContext<'r>,
+{
+    async fn call(&self, req: &Request) -> Result<Response, Error> {
+        let mut response = Handler::call(self, req).await;
+
+        if let Some(error) = response.extensions_mut().get_mut::<HandlerError>() {
+            return Err(error.0.take().unwrap());
+        }
+
+        Ok(response)
+    }
+}
+
+#[crate::async_trait_internal]
+impl<'req, H, C> Handler<'req, &'req Request> for Erase<H, C>
+where
+    H: for<'r> Handler<'r, C>,
+    C: for<'r> WithContext<'r>,
 {
     type Response = Response;
 
     async fn call(&self, req: &'req Request) -> Self::Response {
-        (self.f)(&self.handler, req).await
-    }
-}
-
-pub struct HandlerError(pub Option<Error>);
-
-pub type ErasedHandler = dyn for<'req> Handler<'req, &'req Request, Response = Response>;
-
-pub fn erase<H, C>(handler: H) -> Box<ErasedHandler>
-where
-    H: for<'req> Handler<'req, C> + 'static,
-    C: for<'req> WithContext<'req>,
-{
-    Box::new(HandlerFn::new(handler, {
-        move |handler, req| {
-            Box::pin(async {
-                match C::Context::extract(req).await {
-                    Ok(context) => handler.call(context).await.respond(req),
-                    Err(mut err) => {
-                        let mut response = err.respond();
-                        response.extensions_mut().insert(HandlerError(Some(err)));
-                        response
-                    }
-                }
-            })
+        match C::Context::extract(req).await {
+            Ok(context) => self.handler.call(context).await.respond(req),
+            Err(mut err) => {
+                let mut response = err.respond();
+                response.extensions_mut().insert(HandlerError(Some(err)));
+                response
+            }
         }
-    }))
+    }
 }
 
 pub trait FnArgs<A> {

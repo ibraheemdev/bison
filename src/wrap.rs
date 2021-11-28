@@ -1,5 +1,5 @@
 use crate::error::IntoResponseError;
-use crate::handler::{ErasedHandler, HandlerError};
+use crate::handler::{Erased, HandlerError};
 use crate::http::{Request, Response};
 use crate::{bounded, Error, Responder};
 
@@ -153,10 +153,10 @@ where
     }
 }
 
-pub struct DynNext<'bison>(pub &'bison ErasedHandler);
+pub struct DynNext<'bison>(pub &'bison Erased);
 
 impl<'bison> DynNext<'bison> {
-    pub fn new(handler: &'bison ErasedHandler) -> Self {
+    pub fn new(handler: &'bison Erased) -> Self {
         Self(handler)
     }
 }

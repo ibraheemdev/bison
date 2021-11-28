@@ -1,5 +1,5 @@
 use crate::error::IntoResponseError;
-use crate::handler::{self, ErasedHandler, Handler};
+use crate::handler::{self, Handler};
 use crate::http::{header, Body, Method, Params, Request, Response, ResponseBuilder, StatusCode};
 use crate::wrap::{And, Call, DynNext, Wrap};
 use crate::{Responder, WithContext};
@@ -10,7 +10,7 @@ use matchit::Node;
 
 pub struct Router<W> {
     wrap: W,
-    routes: HashMap<Method, Node<Box<ErasedHandler>>>,
+    routes: HashMap<Method, Node<Box<handler::Erased>>>,
 }
 
 impl Router<Call> {
@@ -45,12 +45,12 @@ where
     where
         P: Into<String>,
         H: for<'req> Handler<'req, C> + 'static,
-        C: for<'req> WithContext<'req>,
+        C: for<'req> WithContext<'req> + 'static,
     {
         self.routes
             .entry(method)
             .or_default()
-            .insert(path, handler::erase(handler))?;
+            .insert(path, Box::new(handler::erase(handler)))?;
 
         Ok(self)
     }

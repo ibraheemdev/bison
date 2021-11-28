@@ -1,4 +1,4 @@
-use crate::handler::{self, ErasedHandler, Handler, HandlerExt};
+use crate::handler::{self, Erased, Handler, HandlerExt};
 use crate::http::Method;
 use crate::wrap::{And, Call, Wrap};
 use crate::{bounded, Bison, WithContext};
@@ -6,7 +6,7 @@ use crate::{bounded, Bison, WithContext};
 pub struct Scope<W> {
     wrap: W,
     prefix: String,
-    routes: Vec<(Method, String, Box<ErasedHandler>)>,
+    routes: Vec<(Method, String, Box<Erased>)>,
 }
 
 impl Scope<Call> {
@@ -64,10 +64,13 @@ macro_rules! insert_route {
         pub fn $name<H, C>(mut self, path: &str, handler: H) -> Scope<impl Wrap>
         where
             H: for<'r> Handler<'r, C> + 'static,
-            C: for<'r> WithContext<'r>,
+            C: for<'r> WithContext<'r> + 'static,
         {
-            self.routes
-                .push((Method::$method, path.into(), handler::erase(handler)));
+            self.routes.push((
+                Method::$method,
+                path.into(),
+                Box::new(handler::erase(handler)),
+            ));
             self
         }
     };

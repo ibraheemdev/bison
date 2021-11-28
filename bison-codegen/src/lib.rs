@@ -1,11 +1,9 @@
 extern crate proc_macro;
 
-use proc_macro2::{Ident, Span, TokenStream};
+use proc_macro2::{Ident, TokenStream};
 use quote::{quote, quote_spanned, ToTokens};
 use syn::spanned::Spanned;
 use syn::*;
-
-const REQUEST_LIFETIME: &str = "'bison_request";
 
 #[proc_macro_derive(Context, attributes(cx))]
 pub fn derive_context(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
@@ -16,8 +14,6 @@ pub fn derive_context(input: proc_macro::TokenStream) -> proc_macro::TokenStream
 }
 
 fn expand(input: DeriveInput) -> Result<TokenStream> {
-    let request_lifetime = Lifetime::new(REQUEST_LIFETIME, Span::call_site());
-
     let name = &input.ident;
 
     let strukt = match &input.data {
@@ -83,53 +79,40 @@ fn expand(input: DeriveInput) -> Result<TokenStream> {
         })
         .collect::<Result<Vec<_>>>()?;
 
-    let mut with_req_lifetime = input.generics.clone();
-    with_req_lifetime
-        .params
-        .push(GenericParam::Lifetime(LifetimeDef {
-            attrs: Vec::new(),
-            lifetime: request_lifetime.clone(),
-            colon_token: None,
-            bounds: Default::default(),
-        }));
-
-    let (impl_generics, _, _) = with_req_lifetime.split_for_impl();
-    let (_, ty_generics, where_clause) = input.generics.split_for_impl();
-
-    let context_ty_generics = ty_lifetime
-        .as_ref()
-        .map(|_| quote! { <#request_lifetime> })
-        .unwrap_or_default();
-
-    let with_context = quote! {
-        impl #impl_generics ::bison::WithContext<#request_lifetime> for #name #ty_generics #where_clause {
-            type Context = #name #context_ty_generics;
-        }
+    let ty = match ty_lifetime {
+        Some(ref l) => quote! { #name<#l> },
+        None => quote! { #name },
     };
 
-    match with_req_lifetime.params.last_mut().unwrap() {
-        GenericParam::Lifetime(l) => {
-            l.bounds = ty_lifetime.into_iter().collect();
-        }
-        _ => unreachable!(),
-    }
-
-    let (impl_generics, _, _) = with_req_lifetime.split_for_impl();
-    let (_, ty_generics, where_clause) = input.generics.split_for_impl();
+    let (_, _, where_clause) = input.generics.split_for_impl();
 
     let context = quote! {
-        impl #impl_generics ::bison::Context<#request_lifetime> for #name  #ty_generics #where_clause {
-            fn extract(
-                req: &#request_lifetime ::bison::http::Request
-            ) ->  ::bison::bounded::BoxFuture<#request_lifetime, Result<Self, ::bison::Error>> {
+        impl<'req> ::bison::Context<'req> for #ty #where_clause {
+            type Future = ::bison::bounded::BoxFuture<'req, Result<Self, ::bison::Error>>;
+
+            fn extract(req: &'req ::bison::http::Request) ->  Self::Future {
                 Box::pin(async move { Ok(#name { #(#fields)* }) })
             }
         }
     };
 
+    let with_context = match ty_lifetime {
+        Some(_) => quote! {
+            impl<'req, 'any> ::bison::WithContext<'req> for #name<'any> #where_clause {
+                type Context = #name<'req>;
+            }
+        },
+
+        None => quote! {
+            impl<'req> ::bison::WithContext<'req> for #name #where_clause {
+                type Context = #name;
+            }
+        },
+    };
+
     Ok(quote! {
-        #with_context
         #context
+        #with_context
     })
 }
 
