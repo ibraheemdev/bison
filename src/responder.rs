@@ -1,20 +1,27 @@
+use std::convert::Infallible;
+
 use crate::error::{Error, IntoResponseError};
-use crate::handler::HandlerError;
 use crate::http::{Body, Request, Response};
 
 pub trait Responder {
-    fn respond(self, req: &Request) -> Response;
+    type Error: IntoResponseError;
+
+    fn respond(self, req: &Request) -> Result<Response, Self::Error>;
 }
 
 impl Responder for Response {
-    fn respond(self, _: &Request) -> Response {
-        self
+    type Error = Infallible;
+
+    fn respond(self, _: &Request) -> Result<Response, Infallible> {
+        Ok(self)
     }
 }
 
 impl Responder for String {
-    fn respond(self, _: &Request) -> Response {
-        Response::new(Body::once(self))
+    type Error = Infallible;
+
+    fn respond(self, _: &Request) -> Result<Response, Infallible> {
+        Ok(Response::new(Body::once(self)))
     }
 }
 
@@ -23,15 +30,10 @@ where
     T: Responder,
     E: IntoResponseError,
 {
-    fn respond(self, req: &Request) -> Response {
-        match self {
-            Ok(ok) => ok.respond(req),
-            Err(err) => {
-                let mut err = Error::from(err.into_response_error());
-                let mut response = err.respond();
-                response.extensions_mut().insert(HandlerError(Some(err)));
-                response
-            }
-        }
+    type Error = Error;
+
+    fn respond(self, req: &Request) -> Result<Response, Error> {
+        self.map_err(|err| err.into_response_error())
+            .and_then(|ok| ok.respond(req).map_err(|err| err.into_response_error()))
     }
 }

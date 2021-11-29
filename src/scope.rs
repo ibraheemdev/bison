@@ -1,7 +1,8 @@
-use crate::handler::{self, Erased, Handler, HandlerExt};
+use crate::bounded::Rc;
+use crate::handler::{self, Erased, Handler};
 use crate::http::Method;
 use crate::wrap::{And, Call, Wrap};
-use crate::{bounded, Bison, WithContext};
+use crate::{Bison, WithContext};
 
 pub struct Scope<W> {
     wrap: W,
@@ -32,7 +33,7 @@ where
     where
         M: Wrap,
     {
-        let wrap = bounded::Rc::new(self.wrap);
+        let wrap = Rc::new(self.wrap);
         for (method, path, handler) in self.routes {
             bison = bison.route(
                 &format!("{}{}", self.prefix, path),
@@ -69,7 +70,7 @@ macro_rules! insert_route {
             self.routes.push((
                 Method::$method,
                 path.into(),
-                Box::new(handler::erase(handler)),
+                Box::new(handler::Boxed::new(handler::Extract::new(handler))),
             ));
             self
         }

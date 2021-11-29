@@ -1,4 +1,4 @@
-use crate::bounded;
+use crate::bounded::{BoxError, BoxStream, Send, Sync};
 
 use std::error::Error as StdError;
 use std::pin::Pin;
@@ -29,7 +29,7 @@ impl Params {
 /// Respresents the body of an HTTP message.
 #[non_exhaustive]
 pub enum Body {
-    Stream(bounded::BoxStream<'static, Result<Bytes, bounded::BoxError>>),
+    Stream(BoxStream<'static, Result<Bytes, BoxError>>),
     Once(Bytes),
     Empty,
 }
@@ -38,17 +38,17 @@ impl Body {
     /// Create a `Body` from a stream of bytes.
     pub fn stream<S, E>(stream: S) -> Self
     where
-        S: Stream<Item = Result<Bytes, E>> + bounded::Send + bounded::Sync + 'static,
-        E: StdError + bounded::Send + bounded::Sync + 'static,
+        S: Stream<Item = Result<Bytes, E>> + Send + Sync + 'static,
+        E: StdError + Send + Sync + 'static,
     {
         pub struct MapErr<S>(S);
 
         impl<T, E, S> Stream for MapErr<S>
         where
-            E: StdError + bounded::Send + bounded::Sync + 'static,
+            E: StdError + Send + Sync + 'static,
             S: Stream<Item = Result<T, E>>,
         {
-            type Item = Result<T, bounded::BoxError>;
+            type Item = Result<T, BoxError>;
 
             fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
                 unsafe { self.map_unchecked_mut(|s| &mut s.0) }
@@ -84,7 +84,7 @@ impl fmt::Debug for Body {
 }
 
 impl Stream for Body {
-    type Item = Result<Bytes, bounded::BoxError>;
+    type Item = Result<Bytes, BoxError>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         match &mut *self {

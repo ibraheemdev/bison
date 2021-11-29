@@ -17,6 +17,7 @@ matchit = "0.4.2"
 bison-codegen = { path = "./bison-codegen" }
 serde = "1.0.130"
 serde_urlencoded = "0.7.0"
+pin-project-lite = "0.2.7"
 
 [dev-dependencies]
 serde = { version = "1.0.130", features = ["derive"] }

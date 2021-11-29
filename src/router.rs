@@ -47,10 +47,10 @@ where
         H: for<'req> Handler<'req, C> + 'static,
         C: for<'req> WithContext<'req> + 'static,
     {
-        self.routes
-            .entry(method)
-            .or_default()
-            .insert(path, Box::new(handler::erase(handler)))?;
+        self.routes.entry(method).or_default().insert(
+            path,
+            Box::new(handler::Boxed::new(handler::Extract::new(handler))),
+        )?;
 
         Ok(self)
     }
@@ -102,7 +102,10 @@ where
                         .collect::<Vec<_>>();
                     req.extensions_mut().insert(Params(params));
                     match self.wrap.call(&req, DynNext::new(&**handler)).await {
-                        Ok(ok) => ok.respond(&req),
+                        Ok(ok) => match ok.respond(&req) {
+                            Ok(ok) => ok,
+                            Err(err) => err.into_response_error().respond(),
+                        },
                         Err(err) => err.into_response_error().respond(),
                     }
                 }

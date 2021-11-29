@@ -1,3 +1,4 @@
+use crate::bounded;
 use crate::http::Response;
 
 use std::convert::Infallible;
@@ -65,7 +66,7 @@ where
     }
 }
 
-pub trait IntoResponseError {
+pub trait IntoResponseError: bounded::Send {
     fn into_response_error(self) -> Error;
 }
 

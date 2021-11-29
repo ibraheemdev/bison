@@ -1,7 +1,7 @@
 use std::net::SocketAddr;
 
 use bison::http::{Request, Response};
-use bison::{Bison, Context, Error, HandlerExt, Next, Wrap};
+use bison::{Bison, Context, Error, Handler, Next, Wrap};
 use bison_hyper::{make, Server};
 
 struct Logger;
