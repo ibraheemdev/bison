@@ -49,6 +49,19 @@ impl<W> Bison<W>
 where
     W: Wrap,
 {
+    /// Insert a route for the given method.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use bison::{Bison, Method};
+    ///
+    /// async fn home() -> &'static str {
+    ///     "Hello world!"
+    /// }
+    ///
+    /// let bison = Bison::new().get("/", Method::Get, home);
+    /// ```
     pub fn route<H, C>(self, path: &str, method: Method, handler: H) -> Self
     where
         H: for<'r> Handler<'r, C> + 'static,
@@ -117,7 +130,7 @@ where
     /// struct GetUser {
     ///     id: usize,
     ///     #[cx(state)]
-    ///     db: Database
+    ///     db: &Database
     /// }
     ///
     /// async fn get_user(cx: GetUser) -> String {
@@ -130,7 +143,10 @@ where
     ///     .get("/user/:id", get_user)
     ///     .inject(Database::connect(&database_url));
     /// ```
-    pub fn inject<T: State>(self, state: T) -> Self {
+    pub fn inject<T>(self, state: T) -> Self
+    where
+        T: State,
+    {
         Self {
             router: self.router,
             state: self
@@ -140,6 +156,7 @@ where
         }
     }
 
+    /// Wrap the application with some middleware.
     pub fn wrap(self, wrap: impl Wrap) -> Bison<impl Wrap> {
         Bison {
             router: self.router.wrap(wrap),
@@ -147,6 +164,7 @@ where
         }
     }
 
+    /// Register routes scoped under a common prefix.
     pub fn scope<F, O>(self, prefix: &str, f: F) -> Bison<impl Wrap>
     where
         F: FnOnce(Scope<Call>) -> Scope<O>,

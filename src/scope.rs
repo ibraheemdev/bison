@@ -1,5 +1,5 @@
 use crate::bounded::Rc;
-use crate::handler::{self, Erased, Handler};
+use crate::handler::{self, Erased, Handler, HandlerExt};
 use crate::http::Method;
 use crate::wrap::{And, Call, Wrap};
 use crate::{Bison, WithContext};
@@ -70,7 +70,7 @@ macro_rules! insert_route {
             self.routes.push((
                 Method::$method,
                 path.into(),
-                Box::new(handler::Boxed::new(handler::Extract::new(handler))),
+                Box::new(handler::BoxReturn::new(handler::Extract::new(handler))),
             ));
             self
         }

@@ -49,7 +49,7 @@ where
     {
         self.routes.entry(method).or_default().insert(
             path,
-            Box::new(handler::Boxed::new(handler::Extract::new(handler))),
+            Box::new(handler::BoxReturn::new(handler::Extract::new(handler))),
         )?;
 
         Ok(self)

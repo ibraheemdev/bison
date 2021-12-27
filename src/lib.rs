@@ -1,7 +1,7 @@
 mod bison;
-mod handler;
 mod context;
 mod error;
+mod handler;
 mod responder;
 mod router;
 mod scope;
@@ -12,14 +12,14 @@ pub mod bounded;
 pub mod extract;
 pub mod http;
 
-pub use bison::Bison;
+pub use self::bison::Bison;
+pub use self::bounded::async_trait;
+pub use self::context::{Context, WithContext};
+pub use self::error::Error;
+pub use self::handler::Handler;
+pub use self::responder::Responder;
+pub use self::state::State;
+pub use self::wrap::{wrap_fn, Next, Wrap};
 pub use bison_codegen::*;
-pub use bounded::async_trait;
-pub use context::{Context, WithContext};
-pub use error::Error;
-pub use handler::Handler;
-pub use responder::Responder;
-pub use state::State;
-pub use wrap::{wrap_fn, Next, Wrap};
 
 pub(crate) use bounded::async_trait_internal;
