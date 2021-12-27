@@ -35,11 +35,17 @@ where
     {
         let wrap = Rc::new(self.wrap);
         for (method, path, handler) in self.routes {
-            bison = bison.route(
-                &format!("{}{}", self.prefix, path),
-                method,
-                handler.wrap(wrap.clone()),
-            );
+            bison = Bison {
+                router: bison
+                    .router
+                    .route(
+                        method,
+                        format!("{}{}", self.prefix, path),
+                        Box::new(handler::BoxReturn::new(handler.wrap(wrap.clone()))),
+                    )
+                    .expect("failed to insert route"),
+                state: bison.state,
+            };
         }
         bison
     }

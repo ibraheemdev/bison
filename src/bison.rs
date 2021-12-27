@@ -1,5 +1,5 @@
 use crate::context::WithContext;
-use crate::handler::Handler;
+use crate::handler::{self, Handler};
 use crate::http::{Method, Request, Response};
 use crate::router::Router;
 use crate::scope::Scope;
@@ -25,8 +25,8 @@ use crate::wrap::{Call, Wrap};
 ///     .inject(Database::connect("localhost:20717"));
 /// ```
 pub struct Bison<W> {
-    router: Router<W>,
-    state: state::Map,
+    pub(crate) router: Router<W>,
+    pub(crate) state: state::Map,
 }
 
 impl Bison<Call> {
@@ -70,7 +70,11 @@ where
         Bison {
             router: self
                 .router
-                .route(method, path, handler)
+                .route(
+                    method,
+                    path,
+                    Box::new(handler::BoxReturn::new(handler::Extract::new(handler))),
+                )
                 .expect("failed to insert route"),
             state: self.state,
         }
@@ -94,15 +98,7 @@ where
         H: for<'r> Handler<'r, C> + 'static,
         C: for<'r> WithContext<'r> + 'static,
     {
-        let router = self
-            .router
-            .route(Method::GET, path, handler)
-            .expect("failed to insert route");
-
-        Bison {
-            router,
-            state: self.state,
-        }
+        self.route(path, Method::GET, handler)
     }
 
     route!(put => PUT);

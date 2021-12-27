@@ -1,8 +1,8 @@
 use crate::error::IntoResponseError;
-use crate::handler::{self, Handler};
+use crate::handler;
 use crate::http::{header, Body, Method, Params, Request, Response, ResponseBuilder, StatusCode};
 use crate::wrap::{And, Call, DynNext, Wrap};
-use crate::{Responder, WithContext};
+use crate::Responder;
 
 use std::collections::HashMap;
 
@@ -36,17 +36,12 @@ where
         }
     }
 
-    pub(crate) fn route<H, C, P>(
+    pub(crate) fn route(
         mut self,
         method: Method,
-        path: P,
-        handler: H,
-    ) -> Result<Self, matchit::InsertError>
-    where
-        P: Into<String>,
-        H: for<'req> Handler<'req, C> + 'static,
-        C: for<'req> WithContext<'req> + 'static,
-    {
+        path: impl Into<String>,
+        handler: Box<handler::Erased>,
+    ) -> Result<Self, matchit::InsertError> {
         self.routes.entry(method).or_default().insert(
             path,
             Box::new(handler::BoxReturn::new(handler::Extract::new(handler))),
