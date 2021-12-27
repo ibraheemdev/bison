@@ -15,7 +15,7 @@ pub mod http;
 pub use self::bison::Bison;
 pub use self::bounded::async_trait;
 pub use self::context::{Context, WithContext};
-pub use self::error::Error;
+pub use self::error::AnyResponseError;
 pub use self::handler::Handler;
 pub use self::responder::Responder;
 pub use self::state::State;

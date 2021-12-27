@@ -1,6 +1,6 @@
 use std::convert::Infallible;
 
-use crate::error::{Error, IntoResponseError};
+use crate::error::{AnyResponseError, IntoResponseError};
 use crate::http::{Body, Request, Response};
 
 pub trait Responder {
@@ -30,9 +30,9 @@ where
     T: Responder,
     E: IntoResponseError,
 {
-    type Error = Error;
+    type Error = AnyResponseError;
 
-    fn respond(self, req: &Request) -> Result<Response, Error> {
+    fn respond(self, req: &Request) -> Result<Response, AnyResponseError> {
         self.map_err(|err| err.into_response_error())
             .and_then(|ok| ok.respond(req).map_err(|err| err.into_response_error()))
     }

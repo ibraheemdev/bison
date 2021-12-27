@@ -2,7 +2,7 @@ use crate::bounded::{BoxFuture, Rc, Send, Sync};
 use crate::error::IntoResponseError;
 use crate::handler::Erased;
 use crate::http::{Request, Response};
-use crate::{Error, Responder};
+use crate::{AnyResponseError, Responder};
 
 use std::future::Future;
 use std::marker::PhantomData;
@@ -33,11 +33,11 @@ impl<W: Wrap> Wrap for Rc<W> {
 
 #[crate::async_trait_internal]
 pub trait Next: Send + Sync {
-    async fn call(&self, req: &Request) -> Result<Response, Error>;
+    async fn call(&self, req: &Request) -> Result<Response, AnyResponseError>;
 }
 
 impl<I: Next> Next for &I {
-    fn call<'a, 'b, 'o>(&'a self, req: &'b Request) -> BoxFuture<'o, Result<Response, Error>>
+    fn call<'a, 'b, 'o>(&'a self, req: &'b Request) -> BoxFuture<'o, Result<Response, AnyResponseError>>
     where
         'a: 'o,
         'b: 'o,
@@ -57,7 +57,7 @@ impl Call {
 
 #[crate::async_trait_internal]
 impl Wrap for Call {
-    type Error = Error;
+    type Error = AnyResponseError;
 
     async fn call<'a>(&self, req: &Request, next: impl Next + 'a) -> Result<Response, Self::Error> {
         next.call(req).await
@@ -96,7 +96,7 @@ where
     O: Wrap,
     I: Next,
 {
-    async fn call(&self, req: &Request) -> Result<Response, Error> {
+    async fn call(&self, req: &Request) -> Result<Response, AnyResponseError> {
         self.outer
             .call(req, &self.inner)
             .await
@@ -115,7 +115,7 @@ impl<'bison> DynNext<'bison> {
 
 #[crate::async_trait_internal]
 impl<'bison> Next for DynNext<'bison> {
-    async fn call(&self, req: &Request) -> Result<Response, Error> {
+    async fn call(&self, req: &Request) -> Result<Response, AnyResponseError> {
         self.0.call(req).await
     }
 }

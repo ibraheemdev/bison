@@ -127,7 +127,7 @@ impl<E> ResponseError for ParamError<E>
 where
     E: fmt::Debug + fmt::Display + Send + Sync,
 {
-    fn respond(&mut self) -> Response {
+    fn respond(&self) -> Response {
         ResponseBuilder::new()
             .status(StatusCode::NOT_FOUND)
             .body(Body::empty())
@@ -169,7 +169,7 @@ impl fmt::Display for QueryError {
 }
 
 impl ResponseError for QueryError {
-    fn respond(&mut self) -> Response {
+    fn respond(&self) -> Response {
         ResponseBuilder::new()
             .status(StatusCode::NOT_FOUND)
             .body(Body::empty())
@@ -193,7 +193,7 @@ impl fmt::Display for DefaultError {
 }
 
 impl ResponseError for DefaultError {
-    fn respond(&mut self) -> Response {
+    fn respond(&self) -> Response {
         ResponseBuilder::new()
             .status(StatusCode::NOT_FOUND)
             .body(Body::empty())

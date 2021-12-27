@@ -1,14 +1,14 @@
 use std::net::SocketAddr;
 
 use bison::http::{Request, Response};
-use bison::{Bison, Context, Error, Handler, Next, Wrap};
+use bison::{Bison, Context, AnyResponseError, Handler, Next, Wrap};
 use bison_hyper::{make, Server};
 
 struct Logger;
 
 #[bison::async_trait]
 impl Wrap for Logger {
-    type Error = Error;
+    type Error = AnyResponseError;
 
     async fn call<'a>(&self, req: &Request, next: impl Next + 'a) -> Result<Response, Self::Error> {
         println!("{:?}", req);
@@ -58,7 +58,7 @@ async fn main() {
     }
 }
 
-async fn some_middleware(req: &Request, next: &dyn Next) -> Result<Response, bison::Error> {
+async fn some_middleware(req: &Request, next: &dyn Next) -> Result<Response, bison::AnyResponseError> {
     dbg!("{:?}", req.uri());
     next.call(req).await
 }

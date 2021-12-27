@@ -1,3 +1,5 @@
+//! Abstractions over `Send`ness.
+
 use futures_core::Stream;
 use std::future::Future;
 use std::pin::Pin;

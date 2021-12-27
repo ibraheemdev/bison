@@ -2,7 +2,7 @@ use super::{Extract, Handler};
 use crate::bounded::{BoxFuture, Send, Sync};
 use crate::error::IntoResponseError;
 use crate::http::{Request, Response};
-use crate::{Error, WithContext, Wrap};
+use crate::{AnyResponseError, WithContext, Wrap};
 
 use std::future::Future;
 use std::marker::PhantomData;
@@ -33,7 +33,7 @@ where
     C: for<'b> WithContext<'b> + Send + Sync,
 {
     type Response = Response;
-    type Error = Error;
+    type Error = AnyResponseError;
     type Future = IntoResponseErrorFut<BoxFuture<'a, Result<Response, W::Error>>, W::Error>;
 
     fn call(&'a self, req: &'a Request) -> Self::Future {
@@ -57,7 +57,7 @@ where
     F: Future<Output = Result<Response, E>> + Send,
     E: IntoResponseError,
 {
-    type Output = Result<Response, Error>;
+    type Output = Result<Response, AnyResponseError>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut task::Context<'_>) -> Poll<Self::Output> {
         self.project()
