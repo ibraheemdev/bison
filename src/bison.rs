@@ -2,8 +2,7 @@ use crate::context::WithContext;
 use crate::extract;
 use crate::handler::{self, Handler};
 use crate::http::{Method, Request, Response};
-use crate::router::Router;
-use crate::scope::Scope;
+use crate::router::{Router, Scope};
 use crate::state::{self, State};
 use crate::wrap::{Call, Wrap};
 

@@ -4,6 +4,9 @@ use crate::http::Method;
 use crate::wrap::{And, Call, Wrap};
 use crate::{Bison, WithContext};
 
+/// Routes scoped under a common prefix.
+///
+/// See [`Bison::scope`] for details.
 pub struct Scope<W> {
     wrap: W,
     prefix: String,
@@ -11,7 +14,7 @@ pub struct Scope<W> {
 }
 
 impl Scope<Call> {
-    pub fn new(prefix: impl Into<String>) -> Self {
+    pub(crate) fn new(prefix: impl Into<String>) -> Self {
         let mut prefix = prefix.into();
         if !prefix.starts_with('/') {
             prefix.insert(0, '/');
@@ -50,6 +53,7 @@ where
         bison
     }
 
+    /// Wrap the routes with some middleware.
     pub fn wrap<O>(self, wrap: O) -> Scope<impl Wrap>
     where
         O: Wrap,

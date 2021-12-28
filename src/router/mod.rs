@@ -1,3 +1,6 @@
+mod scope;
+pub use scope::Scope;
+
 use crate::error::IntoResponseError;
 use crate::handler;
 use crate::http::{self, header, Body, Method, Request, Response, ResponseBuilder, StatusCode};

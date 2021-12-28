@@ -115,6 +115,7 @@ impl IntoResponseError for Response {
     }
 }
 
+/// A response error that returns a 404 not found response.
 #[derive(Debug)]
 pub struct NotFound;
 
