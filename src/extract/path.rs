@@ -76,7 +76,7 @@ impl<E> ResponseError for PathError<E>
 where
     E: fmt::Debug + fmt::Display + Send + Sync,
 {
-    fn respond(&self) -> Response {
+    fn respond(self: Box<Self>) -> Response {
         ResponseBuilder::new()
             .status(StatusCode::BAD_REQUEST)
             .body(Body::empty())

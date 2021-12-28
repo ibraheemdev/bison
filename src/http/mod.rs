@@ -2,7 +2,7 @@ mod body;
 pub use body::Body;
 
 pub(crate) mod ext;
-pub use ext::{RequestExt, RequestBuilderExt};
+pub use ext::{RequestBuilderExt, RequestExt, ResponseExt};
 
 pub use bytes::Bytes;
 pub use http::{header, Extensions, HeaderValue, Method, StatusCode};

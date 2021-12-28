@@ -49,6 +49,17 @@ impl Body {
         )))))
     }
 
+    pub fn try_clone(&self) -> Option<Body> {
+        let kind = match *self.0.borrow_mut() {
+            BodyKind::Stream(_) => return None,
+            BodyKind::Once(ref b) => BodyKind::Once(b.clone()),
+            BodyKind::Empty => BodyKind::Empty,
+            BodyKind::Taken => BodyKind::Taken,
+        };
+
+        Some(Body(AtomicRefCell::new(kind)))
+    }
+
     /// Create a body directly from bytes.
     pub fn once(bytes: impl Into<Bytes>) -> Self {
         Body(AtomicRefCell::new(BodyKind::Once(bytes.into())))

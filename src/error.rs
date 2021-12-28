@@ -7,18 +7,12 @@ use std::fmt::{self, Debug, Display};
 /// An error capable of being transformed into an HTTP response.
 pub trait ResponseError: Debug + Display + Send + Sync {
     /// Returns an HTTP response for this error.
-    fn respond(&self) -> Response;
+    fn respond(self: Box<Self>) -> Response;
 }
 
 impl ResponseError for Infallible {
-    fn respond(&self) -> Response {
+    fn respond(self: Box<Self>) -> Response {
         unreachable!()
-    }
-}
-
-impl<'a> ResponseError for Box<dyn ResponseError + 'a> {
-    fn respond(&self) -> Response {
-        (&**self).respond()
     }
 }
 
@@ -40,7 +34,7 @@ impl Error {
     ///
     /// This method is analogous to [`ResponseError::respond`],
     /// which cannot be implemented directly due to coherence rules.
-    pub fn respond(&self) -> Response {
+    pub fn respond(self) -> Response {
         self.inner.respond()
     }
 }
@@ -70,10 +64,12 @@ where
 
 /// A type that can be converted into a response error.
 ///
-/// This trait is used in bounds as [`AnyResponseError`]
-/// cannot implement [`ResponseError`] directly due
-/// while retaining it's blanket `From` impl for use
-/// with `?` operator, due to coherence rules.
+/// This trait allows [`Error`] and [`Response`] to be
+/// used as response errors while not implementing
+/// [`ResponseError`] directly. You shouldn't have
+/// to worry about this trait, but it may show up
+/// in error messages when [`ResponseError`] is
+/// not implemented.
 pub trait IntoResponseError: Send + Sync {
     fn into_response_error(self) -> Error;
 }
@@ -90,5 +86,31 @@ where
 impl IntoResponseError for Error {
     fn into_response_error(self) -> Error {
         self
+    }
+}
+
+impl IntoResponseError for Response {
+    fn into_response_error(self) -> Error {
+        struct Impl(Response);
+
+        impl fmt::Debug for Impl {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                write!(f, "{:?}", self.0)
+            }
+        }
+
+        impl fmt::Display for Impl {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                write!(f, "status {:?}: {:?}", self.0.status(), self.0.body())
+            }
+        }
+
+        impl ResponseError for Impl {
+            fn respond(self: Box<Self>) -> Response {
+                self.0
+            }
+        }
+
+        Impl(self).into()
     }
 }

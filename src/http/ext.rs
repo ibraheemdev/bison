@@ -1,5 +1,5 @@
-use super::RequestBuilder;
-use crate::{state, Request, State};
+use super::{RequestBuilder, ResponseBuilder};
+use crate::{state, Request, Response, State};
 
 /// Extension methods for [`Request`].
 pub trait RequestExt {
@@ -26,6 +26,30 @@ impl RequestExt for Request {
         T: State,
     {
         self.extensions().get::<state::Map>().unwrap().get()
+    }
+}
+
+/// Extension methods for [`Response`].
+pub trait ResponseExt {
+    /// Attempt to clone the response.
+    ///
+    /// This method will return `None` if
+    /// the body is a stream, which cannot
+    /// be cloned.
+    fn try_clone(&self) -> Option<Response>;
+}
+
+impl ResponseExt for Response {
+    fn try_clone(&self) -> Option<Response> {
+        self.body().try_clone().map(|body| {
+            let mut builder = ResponseBuilder::new();
+            *builder.headers_mut().unwrap() = self.headers().clone();
+            builder
+                .status(self.status())
+                .version(self.version())
+                .body(body)
+                .unwrap()
+        })
     }
 }
 

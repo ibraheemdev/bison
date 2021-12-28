@@ -43,7 +43,7 @@ impl fmt::Display for DefaultError {
 }
 
 impl ResponseError for DefaultError {
-    fn respond(&self) -> Response {
+    fn respond(self: Box<Self>) -> Response {
         ResponseBuilder::new()
             .status(StatusCode::NOT_FOUND)
             .body(Body::empty())

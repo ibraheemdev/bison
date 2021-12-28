@@ -36,7 +36,7 @@ impl fmt::Display for StateError {
 }
 
 impl ResponseError for StateError {
-    fn respond(&self) -> Response {
+    fn respond(self: Box<Self>) -> Response {
         ResponseBuilder::new()
             .status(StatusCode::BAD_REQUEST)
             .body(Body::empty())
