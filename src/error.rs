@@ -1,5 +1,5 @@
 use crate::bounded::{Send, Sync};
-use crate::http::Response;
+use crate::http::{Body, Response, ResponseBuilder, StatusCode};
 
 use std::convert::Infallible;
 use std::fmt::{self, Debug, Display};
@@ -25,7 +25,7 @@ impl Error {
     /// Create a new `AnyResponseError` from a given response error.
     pub fn new<E>(err: E) -> Self
     where
-        E: IntoResponseError + 'static,
+        E: IntoResponseError,
     {
         err.into_response_error()
     }
@@ -112,5 +112,23 @@ impl IntoResponseError for Response {
         }
 
         Impl(self).into()
+    }
+}
+
+#[derive(Debug)]
+pub struct NotFound;
+
+impl fmt::Display for NotFound {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "404 not found")
+    }
+}
+
+impl ResponseError for NotFound {
+    fn respond(self: Box<Self>) -> Response {
+        ResponseBuilder::new()
+            .status(StatusCode::NOT_FOUND)
+            .body(Body::empty())
+            .unwrap()
     }
 }

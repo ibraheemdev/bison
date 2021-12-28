@@ -106,9 +106,7 @@ where
                 ExtractProj::Handler { fut } => match fut.poll(cx) {
                     Poll::Ready(Ok(responder)) => Poll::Ready(
                         // TODO: move responding to separate handler
-                        responder
-                            .respond(self.request)
-                            .map_err(|e| e.into_response_error()),
+                        responder.respond().map_err(|e| e.into_response_error()),
                     ),
                     Poll::Ready(Err(err)) => Poll::Ready(Err(err.into_response_error())),
                     Poll::Pending => Poll::Pending,

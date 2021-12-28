@@ -101,7 +101,7 @@ where
             .call(req, &self.inner)
             .await
             .map_err(|e| e.into_response_error())
-            .and_then(|r| r.respond(req).map_err(|e| e.into_response_error()))
+            .and_then(|r| r.respond().map_err(|e| e.into_response_error()))
     }
 }
 

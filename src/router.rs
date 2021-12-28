@@ -100,7 +100,7 @@ where
                     req.extensions_mut().insert(params);
 
                     match self.wrap.call(&req, DynNext::new(&**handler)).await {
-                        Ok(ok) => match ok.respond(&req) {
+                        Ok(ok) => match ok.respond() {
                             Ok(ok) => ok,
                             Err(err) => err.into_response_error().respond(),
                         },

@@ -1,6 +1,5 @@
 mod bison;
 mod context;
-mod error;
 mod handler;
 mod responder;
 mod router;
@@ -10,6 +9,7 @@ mod util;
 mod wrap;
 
 pub mod bounded;
+pub mod error;
 pub mod extract;
 pub mod http;
 
