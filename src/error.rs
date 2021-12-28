@@ -1,4 +1,4 @@
-use crate::bounded;
+use crate::bounded::{Send, Sync};
 use crate::http::Response;
 
 use std::convert::Infallible;
@@ -73,7 +73,7 @@ where
 /// cannot implement [`ResponseError`] directly due
 /// while retaining it's blanket `From` impl for use
 /// with `?` operator, due to coherence rules.
-pub trait IntoResponseError: bounded::Send {
+pub trait IntoResponseError: Send {
     fn into_response_error(self) -> AnyResponseError;
 }
 

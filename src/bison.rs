@@ -1,4 +1,5 @@
 use crate::context::WithContext;
+use crate::extract;
 use crate::handler::{self, Handler};
 use crate::http::{Method, Request, Response};
 use crate::router::Router;
@@ -176,6 +177,7 @@ where
     /// and instead use a server crate such as [`bison_hyper`]
     /// or [`bison_actix`].
     pub async fn serve(&self, mut req: Request) -> Response {
+        extract::setup(&mut req);
         req.extensions_mut().insert(self.state.clone());
         self.router.serve(req).await
     }

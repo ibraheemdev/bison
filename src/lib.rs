@@ -17,6 +17,7 @@ pub use self::bounded::async_trait;
 pub use self::context::{Context, WithContext};
 pub use self::error::AnyResponseError;
 pub use self::handler::Handler;
+pub use self::http::{Request, Response};
 pub use self::responder::Responder;
 pub use self::state::State;
 pub use self::wrap::{wrap_fn, Next, Wrap};

@@ -6,7 +6,7 @@ use std::task::{Context, Poll};
 use std::{fmt, mem};
 
 pub use bytes::Bytes;
-pub use http::{header, HeaderValue, Method, StatusCode};
+pub use http::{header, Extensions, HeaderValue, Method, StatusCode};
 
 use futures_core::Stream;
 

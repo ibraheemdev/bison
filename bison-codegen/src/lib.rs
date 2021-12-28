@@ -74,7 +74,7 @@ fn expand(input: DeriveInput) -> Result<TokenStream> {
             let name = &field.ident.as_ref().unwrap();
             let extracted = extract(field)?;
             Ok(quote! {
-                #name: #extracted,
+                #name: { #extracted },
             })
         })
         .collect::<Result<Vec<_>>>()?;
@@ -88,7 +88,7 @@ fn expand(input: DeriveInput) -> Result<TokenStream> {
 
     let context = quote! {
         impl<'req> ::bison::Context<'req> for #ty #where_clause {
-            type Future = ::bison::bounded::BoxFuture<'req, Result<Self, ::bison::Error>>;
+            type Future = ::bison::bounded::BoxFuture<'req, Result<Self, ::bison::AnyResponseError>>;
 
             fn extract(req: &'req ::bison::http::Request) ->  Self::Future {
                 Box::pin(async move { Ok(#name { #(#fields)* }) })
@@ -118,6 +118,7 @@ fn expand(input: DeriveInput) -> Result<TokenStream> {
 
 fn extract(field: &Field) -> Result<TokenStream> {
     let field_name = field.ident.as_ref().unwrap().to_string();
+    let ty = &field.ty;
 
     for attr in &field.attrs {
         let meta = match attr.parse_meta()? {
@@ -142,18 +143,25 @@ fn extract(field: &Field) -> Result<TokenStream> {
         };
 
         let param = match param {
-            Some(param) => quote! { Arg::new(#field_name, #param) },
-            None => quote! { NoArg::new(#field_name) },
+            Some(param) => quote! { RequiredArgument::new(#field_name, #param) },
+            None => quote! { NoArgument::new(#field_name) },
         };
 
-        return Ok(quote_spanned! { field.ty.span() =>
-            #extractor(req, ::bison::extract::#param.into()).map_err(::bison::Error::from)?
+        return Ok(quote_spanned! { ty.span() =>
+            let result: ::std::result::Result<<#ty as ::bison::extract::Transform<_>>::Ok, ::bison::AnyResponseError> =
+                #extractor(req, ::bison::extract::#param.into())
+                    .map_err(::bison::AnyResponseError::from);
+
+            ::bison::extract::Transform::transform(result)?
         });
     }
 
     return Ok(quote_spanned! { field.ty.span() =>
-        ::bison::extract::default(req, ::bison::extract::NoArg::new(#field_name).into())
-            .map_err(::bison::Error::from)?
+        let result: ::std::result::Result<<#ty as ::bison::extract::Transform<_>>::Ok, ::bison::AnyResponseError> =
+            ::bison::extract::default(req, ::bison::extract::NoArgument::new(#field_name).into())
+                .map_err(::bison::AnyResponseError::from);
+
+        ::bison::extract::Transform::transform(result)?
     });
 }
 
