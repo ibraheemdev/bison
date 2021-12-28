@@ -1,4 +1,5 @@
 use crate::bounded::{BoxError, BoxStream, Send, Sync};
+use crate::util::AtomicRefCell;
 
 use std::error::Error as StdError;
 use std::pin::Pin;
@@ -10,25 +11,53 @@ pub use http::{header, Extensions, HeaderValue, Method, StatusCode};
 
 use futures_core::Stream;
 
+/// An HTTP request.
+///
+/// See [`http::Request`](http::Request) and [`Body`] for details.
 pub type Request = http::Request<Body>;
-pub type ResponseBuilder = http::response::Builder;
+
+/// An HTTP response.
+///
+/// You can create a response with the [`new`](hyper::Response::new) method:
+///
+/// ```
+/// # use astra::{Response, Body};
+/// let response = Response::new(Body::new("Hello world!"));
+/// ```
+///
+/// Or with a [`ResponseBuilder`]:
+///
+/// ```
+/// # use astra::{ResponseBuilder, Body};
+/// let response = ResponseBuilder::new()
+///     .status(404)
+///     .header("X-Custom-Foo", "Bar")
+///     .body(Body::new("Page not found."))
+///     .unwrap();
+/// ```
+///
+/// See [`http::Response`](http::Response) and [`Body`] for details.
 pub type Response = http::Response<Body>;
 
-pub struct Params(pub(crate) Vec<(String, String)>);
-
-impl Params {
-    pub fn get(&self, name: impl AsRef<str>) -> Option<&str> {
-        let name = name.as_ref();
-        self.0
-            .iter()
-            .find(|(x, _)| x == name)
-            .map(|(_, val)| val.as_ref())
-    }
-}
+/// A builder for an HTTP response.
+///
+/// ```
+/// use astra::{ResponseBuilder, Body};
+///
+/// let response = ResponseBuilder::new()
+///     .status(404)
+///     .header("X-Custom-Foo", "Bar")
+///     .body(Body::new("Page not found."))
+///     .unwrap();
+/// ```
+///
+/// See [`http::Response`](http::Response) and [`Body`] for details.
+pub type ResponseBuilder = http::response::Builder;
 
 /// Respresents the body of an HTTP message.
-#[non_exhaustive]
-pub enum Body {
+pub struct Body(AtomicRefCell<BodyKind>);
+
+enum BodyKind {
     Stream(BoxStream<'static, Result<Bytes, BoxError>>),
     Once(Bytes),
     Empty,
@@ -57,17 +86,52 @@ impl Body {
             }
         }
 
-        Self::Stream(Box::pin(MapErr(stream)))
+        Body(AtomicRefCell::new(BodyKind::Stream(Box::pin(MapErr(
+            stream,
+        )))))
     }
 
     /// Create a body directly from bytes.
     pub fn once(bytes: impl Into<Bytes>) -> Self {
-        Self::Once(bytes.into())
+        Body(AtomicRefCell::new(BodyKind::Once(bytes.into())))
     }
 
     /// Create an empty `Body`.
     pub fn empty() -> Self {
-        Self::Empty
+        Body(AtomicRefCell::new(BodyKind::Empty))
+    }
+
+    pub fn take(&self) -> Body {
+        Body(AtomicRefCell::new(mem::replace(
+            &mut *self.0.borrow_mut(),
+            BodyKind::Empty,
+        )))
+    }
+}
+
+impl Stream for &Body {
+    type Item = Result<Bytes, BoxError>;
+
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        let mut inner = self.0.borrow_mut();
+
+        match &mut *inner {
+            BodyKind::Stream(stream) => stream.as_mut().poll_next(cx),
+            BodyKind::Once(bytes) => {
+                let bytes = mem::take(bytes);
+                *inner = BodyKind::Empty;
+                Some(Ok(bytes)).into()
+            }
+            BodyKind::Empty => None.into(),
+        }
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        match &*self.0.borrow_mut() {
+            BodyKind::Stream(stream) => stream.size_hint(),
+            BodyKind::Once(bytes) => (bytes.len(), Some(bytes.len())),
+            BodyKind::Empty => (0, Some(0)),
+        }
     }
 }
 
@@ -83,26 +147,15 @@ impl fmt::Debug for Body {
     }
 }
 
-impl Stream for Body {
-    type Item = Result<Bytes, BoxError>;
+pub struct Params(pub(crate) Vec<(String, String)>);
 
-    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        match &mut *self {
-            Self::Stream(stream) => stream.as_mut().poll_next(cx),
-            Self::Once(bytes) => {
-                let bytes = mem::take(bytes);
-                *self = Self::Empty;
-                Some(Ok(bytes)).into()
-            }
-            Self::Empty => None.into(),
-        }
-    }
+impl Params {
+    pub fn get(&self, name: impl AsRef<str>) -> Option<&str> {
+        let name = name.as_ref();
 
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        match &*self {
-            Self::Stream(stream) => stream.size_hint(),
-            Self::Once(bytes) => (bytes.len(), Some(bytes.len())),
-            Self::Empty => (0, Some(0)),
-        }
+        self.0
+            .iter()
+            .find(|(key, _)| key == name)
+            .map(|(_, val)| val.as_ref())
     }
 }
