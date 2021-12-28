@@ -1,7 +1,7 @@
 use crate::bounded::{Send, Sync};
 use crate::error::ResponseError;
 use crate::extract::OptionalArgument;
-use crate::http::{Body, Params, Request, Response, ResponseBuilder, StatusCode};
+use crate::http::{Body, Request, RequestExt, Response, ResponseBuilder, StatusCode};
 
 use std::convert::Infallible;
 use std::fmt;
@@ -40,15 +40,10 @@ where
 {
     let name = param.value.unwrap_or(param.field_name);
 
-    let param = req
-        .extensions()
-        .get::<Params>()
-        .unwrap()
-        .get(name)
-        .ok_or(PathError {
-            error: None,
-            name: name.to_owned(),
-        })?;
+    let param = req.param(name).ok_or(PathError {
+        error: None,
+        name: name.to_owned(),
+    })?;
 
     T::from_path(param).map_err(|e| PathError {
         error: Some(e),

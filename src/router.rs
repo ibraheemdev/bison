@@ -1,6 +1,6 @@
 use crate::error::IntoResponseError;
 use crate::handler;
-use crate::http::{header, Body, Method, Params, Request, Response, ResponseBuilder, StatusCode};
+use crate::http::{self, header, Body, Method, Request, Response, ResponseBuilder, StatusCode};
 use crate::wrap::{And, Call, DynNext, Wrap};
 use crate::Responder;
 
@@ -90,12 +90,15 @@ where
             Some(node) => match node.at(path) {
                 Ok(matched) => {
                     let handler = matched.value;
+
                     let params = matched
                         .params
                         .iter()
                         .map(|(k, v)| (k.to_owned(), v.to_owned()))
-                        .collect::<Vec<_>>();
-                    req.extensions_mut().insert(Params(params));
+                        .collect::<http::ext::Params>();
+
+                    req.extensions_mut().insert(params);
+
                     match self.wrap.call(&req, DynNext::new(&**handler)).await {
                         Ok(ok) => match ok.respond(&req) {
                             Ok(ok) => ok,

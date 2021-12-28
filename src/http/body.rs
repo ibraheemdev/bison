@@ -11,49 +11,6 @@ pub use http::{header, Extensions, HeaderValue, Method, StatusCode};
 
 use futures_core::Stream;
 
-/// An HTTP request.
-///
-/// See [`http::Request`](http::Request) and [`Body`] for details.
-pub type Request = http::Request<Body>;
-
-/// An HTTP response.
-///
-/// You can create a response with the [`new`](hyper::Response::new) method:
-///
-/// ```
-/// # use astra::{Response, Body};
-/// let response = Response::new(Body::new("Hello world!"));
-/// ```
-///
-/// Or with a [`ResponseBuilder`]:
-///
-/// ```
-/// # use astra::{ResponseBuilder, Body};
-/// let response = ResponseBuilder::new()
-///     .status(404)
-///     .header("X-Custom-Foo", "Bar")
-///     .body(Body::new("Page not found."))
-///     .unwrap();
-/// ```
-///
-/// See [`http::Response`](http::Response) and [`Body`] for details.
-pub type Response = http::Response<Body>;
-
-/// A builder for an HTTP response.
-///
-/// ```
-/// use astra::{ResponseBuilder, Body};
-///
-/// let response = ResponseBuilder::new()
-///     .status(404)
-///     .header("X-Custom-Foo", "Bar")
-///     .body(Body::new("Page not found."))
-///     .unwrap();
-/// ```
-///
-/// See [`http::Response`](http::Response) and [`Body`] for details.
-pub type ResponseBuilder = http::response::Builder;
-
 /// Respresents the body of an HTTP message.
 pub struct Body(AtomicRefCell<BodyKind>);
 
@@ -135,6 +92,18 @@ impl Stream for &Body {
     }
 }
 
+impl Stream for Body {
+    type Item = Result<Bytes, BoxError>;
+
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        <&Body>::poll_next(Pin::new(&mut &*self), cx)
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        <&Body>::size_hint(&self)
+    }
+}
+
 impl Default for Body {
     fn default() -> Self {
         Self::empty()
@@ -144,18 +113,5 @@ impl Default for Body {
 impl fmt::Debug for Body {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Body").finish()
-    }
-}
-
-pub struct Params(pub(crate) Vec<(String, String)>);
-
-impl Params {
-    pub fn get(&self, name: impl AsRef<str>) -> Option<&str> {
-        let name = name.as_ref();
-
-        self.0
-            .iter()
-            .find(|(key, _)| key == name)
-            .map(|(_, val)| val.as_ref())
     }
 }
