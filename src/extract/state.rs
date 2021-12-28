@@ -21,7 +21,7 @@ where
         })
 }
 
-/// The error returned by [`extract::state`](state) if extraction fails.
+/// The error returned by [`extract::state`](state()) if extraction fails.
 ///
 /// Returns a 400 response if used as a [`ResponseError`].
 #[derive(Debug)]

@@ -19,7 +19,7 @@ use std::str::FromStr;
 ///
 /// #[derive(Context)]
 /// struct GetUser {
-///     #[cx(path)] // #[cx(param = "id")]
+///     #[cx(path)] // #[cx(path = "id")]
 ///     id: usize
 /// }
 ///
@@ -51,7 +51,7 @@ where
     })
 }
 
-/// The error returned by [`extract::param`](param) if extraction fails.
+/// The error returned by [`extract::path`](path()) if extraction fails.
 ///
 /// Returns a 404 response if used as a [`ResponseError`].
 #[derive(Debug)]
@@ -78,7 +78,7 @@ where
 {
     fn respond(&self) -> Response {
         ResponseBuilder::new()
-            .status(StatusCode::NOT_FOUND)
+            .status(StatusCode::BAD_REQUEST)
             .body(Body::empty())
             .unwrap()
     }

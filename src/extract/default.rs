@@ -9,7 +9,7 @@ use super::OptionalArgument;
 /// The default extractor.
 ///
 /// This is the extractor used when no `#[cx(..)]` is given. It tries to extract
-/// the type using the [`param`] extractor, and then the [`query`] extractor,
+/// the type using the [`path`](path()) extractor, and then the [`query`](query()) extractor,
 /// returning [`DefaultError`] if both fail.
 pub fn default<'req, T>(req: &'req Request, arg: NoArgument) -> Result<T, DefaultError>
 where

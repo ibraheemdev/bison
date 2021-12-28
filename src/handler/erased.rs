@@ -1,20 +1,20 @@
 use crate::bounded::BoxFuture;
 use crate::http::{Request, Response};
-use crate::{AnyResponseError, Handler};
+use crate::{Error, Handler};
 
 /// A completely type-erased `Handler`.
 pub type Erased = dyn for<'a> Handler<
     'a,
     &'a Request,
     Response = Response,
-    Error = AnyResponseError,
-    Future = BoxFuture<'a, Result<Response, AnyResponseError>>,
+    Error = Error,
+    Future = BoxFuture<'a, Result<Response, Error>>,
 >;
 
 impl<'a, 'any> Handler<'a, &'any Request> for Box<Erased> {
     type Response = Response;
-    type Error = AnyResponseError;
-    type Future = BoxFuture<'a, Result<Response, AnyResponseError>>;
+    type Error = Error;
+    type Future = BoxFuture<'a, Result<Response, Error>>;
 
     fn call(&'a self, req: &'a Request) -> Self::Future {
         (&**self).call(req)
@@ -34,11 +34,11 @@ impl<H> BoxReturn<H> {
 
 impl<'a, H> Handler<'a, &'a Request> for BoxReturn<H>
 where
-    for<'b> H: Handler<'b, &'b Request, Response = Response, Error = AnyResponseError>,
+    for<'b> H: Handler<'b, &'b Request, Response = Response, Error = Error>,
 {
     type Response = Response;
-    type Error = AnyResponseError;
-    type Future = BoxFuture<'a, Result<Response, AnyResponseError>>;
+    type Error = Error;
+    type Future = BoxFuture<'a, Result<Response, Error>>;
 
     fn call(&'a self, req: &'a Request) -> Self::Future {
         Box::pin(async move { self.handler.call(req).await })

@@ -18,6 +18,7 @@ enum BodyKind {
     Stream(BoxStream<'static, Result<Bytes, BoxError>>),
     Once(Bytes),
     Empty,
+    Taken,
 }
 
 impl Body {
@@ -58,11 +59,11 @@ impl Body {
         Body(AtomicRefCell::new(BodyKind::Empty))
     }
 
-    pub fn take(&self) -> Body {
-        Body(AtomicRefCell::new(mem::replace(
-            &mut *self.0.borrow_mut(),
-            BodyKind::Empty,
-        )))
+    pub fn take(&self) -> Option<Body> {
+        match mem::replace(&mut *self.0.borrow_mut(), BodyKind::Taken) {
+            BodyKind::Taken => None,
+            b => Some(Body(AtomicRefCell::new(b))),
+        }
     }
 }
 
@@ -79,7 +80,7 @@ impl Stream for &Body {
                 *inner = BodyKind::Empty;
                 Some(Ok(bytes)).into()
             }
-            BodyKind::Empty => None.into(),
+            BodyKind::Empty | BodyKind::Taken => None.into(),
         }
     }
 
@@ -87,7 +88,7 @@ impl Stream for &Body {
         match &*self.0.borrow_mut() {
             BodyKind::Stream(stream) => stream.size_hint(),
             BodyKind::Once(bytes) => (bytes.len(), Some(bytes.len())),
-            BodyKind::Empty => (0, Some(0)),
+            BodyKind::Empty | BodyKind::Taken => (0, Some(0)),
         }
     }
 }

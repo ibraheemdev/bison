@@ -88,7 +88,7 @@ fn expand(input: DeriveInput) -> Result<TokenStream> {
 
     let context = quote! {
         impl<'req> ::bison::Context<'req> for #ty #where_clause {
-            type Future = ::bison::bounded::BoxFuture<'req, Result<Self, ::bison::AnyResponseError>>;
+            type Future = ::bison::bounded::BoxFuture<'req, Result<Self, ::bison::Error>>;
 
             fn extract(req: &'req ::bison::http::Request) ->  Self::Future {
                 Box::pin(async move { Ok(#name { #(#fields)* }) })
@@ -148,18 +148,18 @@ fn extract(field: &Field) -> Result<TokenStream> {
         };
 
         return Ok(quote_spanned! { ty.span() =>
-            let result: ::std::result::Result<<#ty as ::bison::extract::Transform<_>>::Ok, ::bison::AnyResponseError> =
+            let result: ::std::result::Result<<#ty as ::bison::extract::Transform<_>>::Ok, ::bison::Error> =
                 #extractor(req, ::bison::extract::#param.into())
-                    .map_err(::bison::AnyResponseError::from);
+                    .map_err(::bison::Error::from);
 
             ::bison::extract::Transform::transform(result)?
         });
     }
 
     return Ok(quote_spanned! { field.ty.span() =>
-        let result: ::std::result::Result<<#ty as ::bison::extract::Transform<_>>::Ok, ::bison::AnyResponseError> =
+        let result: ::std::result::Result<<#ty as ::bison::extract::Transform<_>>::Ok, ::bison::Error> =
             ::bison::extract::default(req, ::bison::extract::NoArgument::new(#field_name).into())
-                .map_err(::bison::AnyResponseError::from);
+                .map_err(::bison::Error::from);
 
         ::bison::extract::Transform::transform(result)?
     });

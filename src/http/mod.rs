@@ -14,7 +14,7 @@ pub type Request = http::Request<Body>;
 
 /// An HTTP response.
 ///
-/// You can create a response with the [`new`](hyper::Response::new) method:
+/// You can create a response with the [`new`](http::Response::new) method:
 ///
 /// ```
 /// # use astra::{Response, Body};
@@ -54,4 +54,4 @@ pub type ResponseBuilder = http::response::Builder;
 ///
 /// This is useful for testing. See [`http::request::Builder`](http::request::Builder)
 /// for details.
-pub type RequestBuilder = http::Request<Body>;
+pub type RequestBuilder = http::request::Builder;

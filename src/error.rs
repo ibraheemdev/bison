@@ -23,40 +23,41 @@ impl<'a> ResponseError for Box<dyn ResponseError + 'a> {
 }
 
 /// A dynamically typed response error.
-pub struct AnyResponseError {
+pub struct Error {
     inner: Box<dyn ResponseError>,
 }
 
-impl AnyResponseError {
+impl Error {
     /// Create a new `AnyResponseError` from a given response error.
-    pub fn new(err: impl ResponseError + 'static) -> Self {
-        Self {
-            inner: Box::new(err),
-        }
+    pub fn new<E>(err: E) -> Self
+    where
+        E: IntoResponseError + 'static,
+    {
+        err.into_response_error()
     }
 
     /// Convert this error into an HTTP response.
     ///
-    /// This method is analogous to [`ResponseError::response`],
+    /// This method is analogous to [`ResponseError::respond`],
     /// which cannot be implemented directly due to coherence rules.
     pub fn respond(&self) -> Response {
         self.inner.respond()
     }
 }
 
-impl fmt::Debug for AnyResponseError {
+impl fmt::Debug for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Debug::fmt(&self.inner, f)
     }
 }
 
-impl fmt::Display for AnyResponseError {
+impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Display::fmt(&self.inner, f)
     }
 }
 
-impl<E> From<E> for AnyResponseError
+impl<E> From<E> for Error
 where
     E: ResponseError + 'static,
 {
@@ -73,21 +74,21 @@ where
 /// cannot implement [`ResponseError`] directly due
 /// while retaining it's blanket `From` impl for use
 /// with `?` operator, due to coherence rules.
-pub trait IntoResponseError: Send {
-    fn into_response_error(self) -> AnyResponseError;
+pub trait IntoResponseError: Send + Sync {
+    fn into_response_error(self) -> Error;
 }
 
 impl<E> IntoResponseError for E
 where
     E: ResponseError + 'static,
 {
-    fn into_response_error(self) -> AnyResponseError {
+    fn into_response_error(self) -> Error {
         self.into()
     }
 }
 
-impl IntoResponseError for AnyResponseError {
-    fn into_response_error(self) -> AnyResponseError {
+impl IntoResponseError for Error {
+    fn into_response_error(self) -> Error {
         self
     }
 }

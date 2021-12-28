@@ -1,6 +1,6 @@
 use crate::error::IntoResponseError;
 use crate::http::{Request, Response};
-use crate::{wrap, Context, AnyResponseError, Handler, Responder, WithContext};
+use crate::{wrap, Context, Error, Handler, Responder, WithContext};
 
 use std::future::Future;
 use std::marker::PhantomData;
@@ -29,7 +29,7 @@ where
     H: for<'r> Handler<'r, C>,
     C: for<'r> WithContext<'r>,
 {
-    async fn call(&self, req: &Request) -> Result<Response, AnyResponseError> {
+    async fn call(&self, req: &Request) -> Result<Response, Error> {
         Handler::call(self, req).await
     }
 }
@@ -40,7 +40,7 @@ where
     C: for<'r> WithContext<'r> + 'a,
 {
     type Response = Response;
-    type Error = AnyResponseError;
+    type Error = Error;
     type Future = ExtractFut<'a, H, C>;
 
     fn call(&'a self, req: &'a Request) -> Self::Future {
@@ -86,7 +86,7 @@ where
     H: Handler<'a, C>,
     C: WithContext<'a>,
 {
-    type Output = Result<Response, AnyResponseError>;
+    type Output = Result<Response, Error>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut task::Context<'_>) -> Poll<Self::Output> {
         loop {

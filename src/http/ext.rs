@@ -1,3 +1,4 @@
+use super::RequestBuilder;
 use crate::{state, Request, State};
 
 /// Extension methods for [`Request`].
@@ -28,13 +29,13 @@ impl RequestExt for Request {
     }
 }
 
-/// Extension methods for [`request::Builder`].
+/// Extension methods for [`RequestBuilder`].
 pub trait RequestBuilderExt {
     /// Adds a route parameter to the request.
     fn param(&mut self, name: impl Into<String>, value: impl Into<String>);
 }
 
-impl RequestBuilderExt for http::request::Builder {
+impl RequestBuilderExt for RequestBuilder {
     fn param(&mut self, name: impl Into<String>, value: impl Into<String>) {
         if let Some(params) = self.extensions_mut().unwrap().get_mut::<Params>() {
             params.0.push((name.into(), value.into()));

@@ -1,4 +1,4 @@
-use crate::AnyResponseError;
+use crate::Error;
 
 use std::fmt;
 use std::marker::PhantomPinned;
@@ -10,7 +10,7 @@ pub trait Transform<T>: Sized {
     type Ok;
 
     /// Perform the transformation.
-    fn transform(result: Result<T, AnyResponseError>) -> Result<Self, AnyResponseError>;
+    fn transform(result: Result<T, Error>) -> Result<Self, Error>;
 }
 
 impl<T> Transform<T> for T
@@ -19,15 +19,15 @@ where
 {
     type Ok = T;
 
-    fn transform(result: Result<T, AnyResponseError>) -> Result<Self, AnyResponseError> {
+    fn transform(result: Result<T, Error>) -> Result<Self, Error> {
         result
     }
 }
 
 /// A type that allows specialized transformers.
 ///
-/// Specialized transformers like [`transform::Option`]
-/// and [`transform::Result`] must embed this type
+/// Specialized transformers like [`transform::Option`](Option)
+/// and [`transform::Result`](Result) must embed this type
 /// due to limitations of the rust type-system.
 pub struct TransformSpecialization(PhantomPinned);
 
@@ -72,6 +72,8 @@ impl TransformSpecialization {
 ///     # Default::default()
 /// }
 /// ```
+///
+/// [`Option::None`]: std::option::Option::None
 pub struct Option<T> {
     value: StdOption<T>,
     _t: TransformSpecialization,
@@ -101,7 +103,7 @@ impl<T> Option<T> {
 impl<T> Transform<T> for Option<T> {
     type Ok = T;
 
-    fn transform(result: Result<T, AnyResponseError>) -> Result<Self, AnyResponseError> {
+    fn transform(result: Result<T, Error>) -> Result<Self, Error> {
         Ok(Option {
             value: result.ok(),
             _t: TransformSpecialization::new(),

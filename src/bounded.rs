@@ -45,7 +45,6 @@ mod send {
 
     pub use std::sync::Arc as Rc;
 
-    #[doc(inline)]
     /// A macro for async-trait methods.
     ///
     /// See [`async_trait`](https://docs.rs/async-trait/latest/async_trait/) for details.

@@ -3,6 +3,7 @@ mod default;
 mod path;
 mod query;
 mod state;
+mod body;
 
 pub mod transform;
 

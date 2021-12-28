@@ -24,7 +24,7 @@ use std::str::FromStr;
 ///
 /// #[derive(Context)]
 /// struct Search<'req> {
-///     #[cx(query)]
+///     #[cx(query)] // #[cx(query = "name")]
 ///     name: &'req str,
 /// }
 ///
@@ -107,7 +107,7 @@ where
 {
     fn respond(&self) -> Response {
         ResponseBuilder::new()
-            .status(StatusCode::NOT_FOUND)
+            .status(StatusCode::BAD_REQUEST)
             .body(Body::empty())
             .unwrap()
     }
