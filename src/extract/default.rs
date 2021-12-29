@@ -1,7 +1,7 @@
-use crate::error::ResponseError;
 use crate::extract::arg::{FieldName, ParamName};
 use crate::extract::{path, query, FromPath, FromQuery};
 use crate::http::{Body, Request, Response, ResponseBuilder, StatusCode};
+use crate::Reject;
 
 use std::fmt;
 
@@ -23,7 +23,7 @@ where
 
 /// The error returned by [`extract::default`](`default`).
 ///
-/// Returns a 404 response if used as a [`ResponseError`].
+/// Returns a 404 response when used as a rejection.
 #[derive(Debug)]
 pub struct DefaultError {
     ty: &'static str,
@@ -39,8 +39,8 @@ impl fmt::Display for DefaultError {
     }
 }
 
-impl ResponseError for DefaultError {
-    fn respond(self: Box<Self>) -> Response {
+impl Reject for DefaultError {
+    fn reject(self: Box<Self>, _: &Request) -> Response {
         ResponseBuilder::new()
             .status(StatusCode::NOT_FOUND)
             .body(Body::empty())

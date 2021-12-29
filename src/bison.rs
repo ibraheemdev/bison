@@ -1,6 +1,5 @@
-use crate::context::WithContext;
 use crate::extract;
-use crate::handler::{self, Handler};
+use crate::handler::{self, Handler, WithContext};
 use crate::http::ext::Cache;
 use crate::http::{Method, Request, Response};
 use crate::router::{Router, Scope};

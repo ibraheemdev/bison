@@ -1,15 +1,19 @@
+//! Asynchronous functions that can handle HTTP requests.
+
+mod context;
 mod erased;
 mod extract;
 mod function;
 mod wrapped;
 
+pub use context::{Context, WithContext};
 pub use erased::{BoxReturn, Erased};
 pub use extract::Extract;
 pub use wrapped::Wrapped;
 
 use crate::bounded::{Send, Sync};
-use crate::error::IntoResponseError;
-use crate::{Responder, WithContext, Wrap};
+use crate::reject::IntoRejection;
+use crate::{Responder, Wrap};
 
 use std::future::Future;
 
@@ -25,10 +29,10 @@ where
     type Response: Responder;
 
     /// An error that can occur when calling the handler.
-    type Error: IntoResponseError;
+    type Rejection: IntoRejection;
 
     /// The future returned by [`call`](Self::call).
-    type Future: Future<Output = Result<Self::Response, Self::Error>> + Send + 'a;
+    type Future: Future<Output = Result<Self::Response, Self::Rejection>> + Send + 'a;
 
     /// Call the handler with some context about the request.
     fn call(&'a self, cx: C::Context) -> Self::Future;

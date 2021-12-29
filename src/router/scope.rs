@@ -1,8 +1,8 @@
 use crate::bounded::Rc;
-use crate::handler::{self, Erased, Handler};
+use crate::handler::{self, Erased, Handler, WithContext};
 use crate::http::Method;
 use crate::wrap::{Call, Wrap};
-use crate::{Bison, WithContext};
+use crate::Bison;
 
 /// Routes scoped under a common prefix.
 ///

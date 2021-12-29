@@ -1,24 +1,22 @@
 mod bison;
-mod context;
-mod handler;
 mod responder;
 mod router;
 mod state;
 mod util;
 
 pub mod bounded;
-pub mod error;
 pub mod extract;
+pub mod handler;
 pub mod http;
+pub mod reject;
 pub mod wrap;
 
 doc_inline! {
     pub use self::http::{Request, Response};
     pub use self::wrap::Wrap;
     pub use self::bison::Bison;
-    pub use self::context::{Context, WithContext};
-    pub use self::error::{Error, IntoResponseError, ResponseError};
-    pub use self::handler::Handler;
+    pub use self::handler::{Context};
+    pub use self::reject::{Rejection, Reject};
     pub use self::responder::Responder;
     pub use self::router::Scope;
     pub use self::state::State;

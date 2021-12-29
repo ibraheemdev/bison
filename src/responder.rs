@@ -1,20 +1,20 @@
 use std::borrow::Cow;
 use std::convert::Infallible;
 
-use crate::error::{Error, IntoResponseError, NotFound};
 use crate::http::{header, Body, Bytes, Response, ResponseBuilder, StatusCode};
+use crate::reject::{IntoRejection, NotFound, Rejection};
 
 /// A type that can be converted into an HTTP response.
 pub trait Responder {
     /// An error that can occur during the conversion.
-    type Error: IntoResponseError;
+    type Rejection: IntoRejection;
 
     /// Convert into an HTTP response.
-    fn respond(self) -> Result<Response, Self::Error>;
+    fn respond(self) -> Result<Response, Self::Rejection>;
 }
 
 impl Responder for () {
-    type Error = Infallible;
+    type Rejection = Infallible;
 
     fn respond(self) -> Result<Response, Infallible> {
         Ok(Response::default())
@@ -22,7 +22,7 @@ impl Responder for () {
 }
 
 impl Responder for Response {
-    type Error = Infallible;
+    type Rejection = Infallible;
 
     fn respond(self) -> Result<Response, Infallible> {
         Ok(self)
@@ -33,9 +33,9 @@ impl<T> Responder for (StatusCode, T)
 where
     T: Responder,
 {
-    type Error = T::Error;
+    type Rejection = T::Rejection;
 
-    fn respond(self) -> Result<Response, T::Error> {
+    fn respond(self) -> Result<Response, T::Rejection> {
         self.1.respond().map(|mut response| {
             *response.status_mut() = self.0;
             response
@@ -46,13 +46,13 @@ where
 impl<T, E> Responder for Result<T, E>
 where
     T: Responder,
-    E: IntoResponseError,
+    E: IntoRejection,
 {
-    type Error = Error;
+    type Rejection = Rejection;
 
-    fn respond(self) -> Result<Response, Error> {
-        self.map_err(Error::new)
-            .and_then(|ok| ok.respond().map_err(Error::new))
+    fn respond(self) -> Result<Response, Rejection> {
+        self.map_err(Rejection::new)
+            .and_then(|ok| ok.respond().map_err(Rejection::new))
     }
 }
 
@@ -60,11 +60,11 @@ impl<T> Responder for Option<T>
 where
     T: Responder,
 {
-    type Error = Error;
+    type Rejection = Rejection;
 
-    fn respond(self) -> Result<Response, Error> {
+    fn respond(self) -> Result<Response, Rejection> {
         match self {
-            Some(responder) => responder.respond().map_err(Error::new),
+            Some(responder) => responder.respond().map_err(Rejection::new),
             None => Err(NotFound.into()),
         }
     }
@@ -73,7 +73,7 @@ where
 macro_rules! with_content_type {
     ($($ty:ty $(|$into:ident)? => $content_type:literal),* $(,)?) => { $(
         impl Responder for $ty {
-            type Error = Infallible;
+            type Rejection = Infallible;
 
             fn respond(self) -> Result<Response, Infallible> {
                 Ok(ResponseBuilder::new()

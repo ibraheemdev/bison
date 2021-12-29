@@ -1,6 +1,6 @@
 use crate::bounded::{Send, Sync};
 use crate::http::Request;
-use crate::Error;
+use crate::Rejection;
 
 use std::future::{ready, Future, Ready};
 
@@ -20,7 +20,7 @@ use std::future::{ready, Future, Ready};
 /// }
 /// ```
 pub trait Context<'req>: Send + Sync + Sized {
-    type Future: Future<Output = Result<Self, Error>> + Send + 'req;
+    type Future: Future<Output = Result<Self, Rejection>> + Send + 'req;
 
     fn extract(req: &'req Request) -> Self::Future;
 }
@@ -35,7 +35,7 @@ pub trait WithContext<'req>: Send + Sync {
 }
 
 impl<'req> Context<'req> for &'req Request {
-    type Future = Ready<Result<Self, Error>>;
+    type Future = Ready<Result<Self, Rejection>>;
 
     fn extract(req: &'req Request) -> Self::Future {
         ready(Ok(req))
@@ -47,7 +47,7 @@ impl<'any, 'req> WithContext<'req> for &'any Request {
 }
 
 impl<'req> Context<'req> for () {
-    type Future = Ready<Result<Self, Error>>;
+    type Future = Ready<Result<Self, Rejection>>;
 
     fn extract(_: &'req Request) -> Self::Future {
         ready(Ok(()))

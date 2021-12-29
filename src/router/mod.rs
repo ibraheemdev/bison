@@ -1,11 +1,10 @@
 mod scope;
 pub use scope::Scope;
 
-use crate::error::IntoResponseError;
-use crate::handler;
 use crate::http::{self, header, Body, Method, Request, Response, ResponseBuilder, StatusCode};
+use crate::reject::IntoRejection;
 use crate::wrap::{Call, DynNext, Wrap};
-use crate::Responder;
+use crate::{handler, Responder};
 
 use std::collections::HashMap;
 
@@ -102,9 +101,9 @@ where
                     match self.wrap.call(&req, &DynNext::new(&**handler)).await {
                         Ok(ok) => match ok.respond() {
                             Ok(ok) => ok,
-                            Err(err) => err.into_response_error().respond(),
+                            Err(err) => err.into_response_error().reject(&req),
                         },
-                        Err(err) => err.into_response_error().respond(),
+                        Err(err) => err.into_response_error().reject(&req),
                     }
                 }
                 Err(e) if e.tsr() && req.method() != Method::CONNECT && path != "/" => {

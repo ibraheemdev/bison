@@ -1,7 +1,7 @@
 use crate::bounded::{Send, Sync};
-use crate::error::ResponseError;
 use crate::extract::arg::ParamName;
 use crate::http::{Body, Request, RequestExt, Response, ResponseBuilder, StatusCode};
+use crate::Reject;
 
 use std::convert::Infallible;
 use std::fmt;
@@ -47,7 +47,7 @@ where
 
 /// The error returned by [`extract::path`](path()) if extraction fails.
 ///
-/// Returns a 404 response if used as a [`ResponseError`].
+/// Returns a 404 response if used as a rejection.
 #[derive(Debug)]
 pub struct PathError<E> {
     error: Option<E>,
@@ -66,11 +66,11 @@ where
     }
 }
 
-impl<E> ResponseError for PathError<E>
+impl<E> Reject for PathError<E>
 where
     E: fmt::Debug + fmt::Display + Send + Sync,
 {
-    fn respond(self: Box<Self>) -> Response {
+    fn reject(self: Box<Self>, _: &Request) -> Response {
         ResponseBuilder::new()
             .status(StatusCode::BAD_REQUEST)
             .body(Body::empty())

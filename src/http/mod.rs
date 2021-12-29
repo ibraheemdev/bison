@@ -1,3 +1,5 @@
+//! Common HTTP types.
+
 mod body;
 pub use body::Body;
 

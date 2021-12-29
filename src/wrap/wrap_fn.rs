@@ -1,6 +1,6 @@
 use crate::bounded::{Send, Sync};
-use crate::error::IntoResponseError;
 use crate::http::{Request, Response};
+use crate::reject::IntoRejection;
 use crate::wrap::{Next, Wrap};
 
 use std::future::Future;
@@ -35,7 +35,7 @@ impl<'a, O, E, F> WrapFn<'a, E> for F
 where
     F: Fn(&'a Request, &'a dyn Next) -> O + Send + Sync + 'static,
     O: Future<Output = Result<Response, E>> + Send + 'a,
-    E: IntoResponseError,
+    E: IntoRejection,
 {
     type F = O;
 
@@ -47,7 +47,7 @@ where
 pub fn __internal_wrap_fn<F, E>(f: F) -> impl Wrap
 where
     for<'a> F: WrapFn<'a, E>,
-    E: IntoResponseError + 'static,
+    E: IntoRejection + 'static,
 {
     struct WrapFnImpl<F, E>(F, PhantomData<E>);
 
@@ -55,11 +55,11 @@ where
     impl<F, E> Wrap for WrapFnImpl<F, E>
     where
         F: for<'a> WrapFn<'a, E>,
-        E: IntoResponseError + 'static,
+        E: IntoRejection + 'static,
     {
-        type Error = E;
+        type Rejection = E;
 
-        async fn call(&self, req: &Request, next: &impl Next) -> Result<Response, Self::Error> {
+        async fn call(&self, req: &Request, next: &impl Next) -> Result<Response, Self::Rejection> {
             self.0.call(req, &next).await
         }
     }

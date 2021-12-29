@@ -1,4 +1,4 @@
-use crate::Error;
+use crate::Rejection;
 
 use std::fmt;
 use std::marker::PhantomPinned;
@@ -10,7 +10,7 @@ pub trait Transform<T>: Sized {
     type Ok;
 
     /// Perform the transformation.
-    fn transform(result: Result<T, Error>) -> Result<Self, Error>;
+    fn transform(result: Result<T, Rejection>) -> Result<Self, Rejection>;
 }
 
 impl<T> Transform<T> for T
@@ -19,7 +19,7 @@ where
 {
     type Ok = T;
 
-    fn transform(result: Result<T, Error>) -> Result<Self, Error> {
+    fn transform(result: Result<T, Rejection>) -> Result<Self, Rejection> {
         result
     }
 }
@@ -103,7 +103,7 @@ impl<T> Optional<T> {
 impl<T> Transform<T> for Optional<T> {
     type Ok = T;
 
-    fn transform(result: Result<T, Error>) -> Result<Self, Error> {
+    fn transform(result: Result<T, Rejection>) -> Result<Self, Rejection> {
         Ok(Optional {
             value: result.ok(),
             _t: TransformSpecialization::new(),

@@ -1,8 +1,8 @@
-use super::{Extract, Handler};
 use crate::bounded::{BoxFuture, Send, Sync};
-use crate::error::IntoResponseError;
+use crate::handler::{Extract, Handler, WithContext};
 use crate::http::{Request, Response};
-use crate::{Error, WithContext, Wrap};
+use crate::reject::IntoRejection;
+use crate::{Rejection, Wrap};
 
 use std::future::Future;
 use std::marker::PhantomData;
@@ -33,8 +33,8 @@ where
     C: for<'b> WithContext<'b> + Send + Sync,
 {
     type Response = Response;
-    type Error = Error;
-    type Future = IntoResponseErrorFut<BoxFuture<'a, Result<Response, W::Error>>, W::Error>;
+    type Rejection = Rejection;
+    type Future = IntoResponseErrorFut<BoxFuture<'a, Result<Response, W::Rejection>>, W::Rejection>;
 
     fn call(&'a self, req: &'a Request) -> Self::Future {
         IntoResponseErrorFut {
@@ -55,9 +55,9 @@ pin_project_lite::pin_project! {
 impl<F, E> Future for IntoResponseErrorFut<F, E>
 where
     F: Future<Output = Result<Response, E>> + Send,
-    E: IntoResponseError,
+    E: IntoRejection,
 {
-    type Output = Result<Response, Error>;
+    type Output = Result<Response, Rejection>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut task::Context<'_>) -> Poll<Self::Output> {
         self.project()

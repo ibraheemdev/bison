@@ -1,6 +1,6 @@
-use crate::error::ResponseError;
 use crate::http::{Body, Request, Response, ResponseBuilder, StatusCode};
 use crate::state::{self, State};
+use crate::Reject;
 
 use std::fmt;
 
@@ -22,7 +22,7 @@ where
 
 /// The error returned by [`extract::state`](state()) if extraction fails.
 ///
-/// Returns a 400 response if used as a [`ResponseError`].
+/// Returns a 400 response when used as a rejection.
 #[derive(Debug)]
 pub struct StateError {
     ty: &'static str,
@@ -34,8 +34,8 @@ impl fmt::Display for StateError {
     }
 }
 
-impl ResponseError for StateError {
-    fn respond(self: Box<Self>) -> Response {
+impl Reject for StateError {
+    fn reject(self: Box<Self>, _: &Request) -> Response {
         ResponseBuilder::new()
             .status(StatusCode::BAD_REQUEST)
             .body(Body::empty())

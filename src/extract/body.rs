@@ -1,6 +1,6 @@
 use crate::bounded::{Send, Sync};
 use crate::http::{Body, Request, Response, ResponseBuilder, StatusCode};
-use crate::ResponseError;
+use crate::Reject;
 
 use std::fmt;
 
@@ -45,11 +45,11 @@ where
     }
 }
 
-impl<E> ResponseError for BodyError<E>
+impl<E> Reject for BodyError<E>
 where
     E: fmt::Debug + fmt::Display + Send + Sync,
 {
-    fn respond(self: Box<Self>) -> Response {
+    fn reject(self: Box<Self>, _: &Request) -> Response {
         ResponseBuilder::new()
             .status(StatusCode::NOT_FOUND)
             .body(Body::empty())

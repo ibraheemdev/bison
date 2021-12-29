@@ -2,7 +2,8 @@
 //! with HRTBs :(
 
 use crate::bounded::{Send, Sync};
-use crate::{Handler, Responder, WithContext};
+use crate::handler::{Handler, WithContext};
+use crate::Responder;
 
 use std::convert::Infallible;
 use std::future::Future;
@@ -17,7 +18,7 @@ where
 {
     type Response = R;
     type Future = InfallibleFut<O>;
-    type Error = Infallible;
+    type Rejection = Infallible;
 
     fn call(&'a self, _: ()) -> Self::Future {
         InfallibleFut { future: self() }
@@ -34,7 +35,7 @@ where
 {
     type Response = R;
     type Future = InfallibleFut<O>;
-    type Error = Infallible;
+    type Rejection = Infallible;
 
     fn call(&self, req: C::Context) -> Self::Future {
         InfallibleFut { future: self(req) }

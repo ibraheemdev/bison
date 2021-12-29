@@ -1,3 +1,5 @@
+//! Extract context from a request.
+
 mod body;
 mod default;
 mod path;

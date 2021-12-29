@@ -1,6 +1,6 @@
-use crate::error::ResponseError;
 use crate::extract::arg::ParamName;
 use crate::http::{Body, Request, Response, ResponseBuilder, StatusCode};
+use crate::Reject;
 
 use std::collections::HashMap;
 use std::convert::Infallible;
@@ -65,7 +65,7 @@ pub(crate) struct CachedQuery(OnceCell<HashMap<String, String>>);
 
 /// The error returned by [`extract::query`](query) if extraction fails.
 ///
-/// Returns a 404 response if used as a [`ResponseError`].
+/// Returns a 404 response when used as a rejection.
 #[derive(Debug)]
 pub struct QueryError<E>(QueryErrorKind<E>);
 
@@ -95,11 +95,11 @@ where
     }
 }
 
-impl<E> ResponseError for QueryError<E>
+impl<E> Reject for QueryError<E>
 where
     E: fmt::Debug + fmt::Display + Send + Sync,
 {
-    fn respond(self: Box<Self>) -> Response {
+    fn reject(self: Box<Self>, _: &Request) -> Response {
         ResponseBuilder::new()
             .status(StatusCode::BAD_REQUEST)
             .body(Body::empty())

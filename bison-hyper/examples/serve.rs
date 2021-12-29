@@ -1,7 +1,7 @@
 use std::net::SocketAddr;
 
 use bison::extract::transform;
-use bison::{wrap_fn, Bison, Context, Error, Next, Request, Response, Wrap};
+use bison::{wrap_fn, Bison, Context, Next, Rejection, Request, Response, Wrap};
 use bison_hyper::{make, Server};
 
 #[derive(Context)]
@@ -35,7 +35,7 @@ struct Logger;
 
 #[bison::async_trait]
 impl Wrap for Logger {
-    type Error = Error;
+    type Error = Rejection;
 
     async fn call<'a>(&self, req: &Request, next: impl Next + 'a) -> Result<Response, Self::Error> {
         match next.call(req).await {
