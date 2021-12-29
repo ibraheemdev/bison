@@ -4,7 +4,7 @@ pub use scope::Scope;
 use crate::error::IntoResponseError;
 use crate::handler;
 use crate::http::{self, header, Body, Method, Request, Response, ResponseBuilder, StatusCode};
-use crate::wrap::{And, Call, DynNext, Wrap};
+use crate::wrap::{Call, DynNext, Wrap};
 use crate::Responder;
 
 use std::collections::HashMap;
@@ -31,10 +31,7 @@ where
 {
     pub(crate) fn wrap(self, wrap: impl Wrap) -> Router<impl Wrap> {
         Router {
-            wrap: And {
-                inner: self.wrap,
-                outer: wrap,
-            },
+            wrap: self.wrap.and(wrap),
             routes: self.routes,
         }
     }

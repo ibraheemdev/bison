@@ -1,7 +1,7 @@
 use crate::bounded::Rc;
-use crate::handler::{self, Erased, Handler, HandlerExt};
+use crate::handler::{self, Erased, Handler};
 use crate::http::Method;
-use crate::wrap::{And, Call, Wrap};
+use crate::wrap::{Call, Wrap};
 use crate::{Bison, WithContext};
 
 /// Routes scoped under a common prefix.
@@ -59,10 +59,7 @@ where
         O: Wrap,
     {
         Scope {
-            wrap: And {
-                inner: self.wrap,
-                outer: wrap,
-            },
+            wrap: self.wrap.and(wrap),
             prefix: self.prefix,
             routes: self.routes,
         }

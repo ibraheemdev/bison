@@ -32,10 +32,7 @@ where
 
     /// Call the handler with some context about the request.
     fn call(&'a self, cx: C::Context) -> Self::Future;
-}
 
-/// Useful extension methods for handlers.
-pub trait HandlerExt<'a, C> {
     /// Wrap a handler with some middleware.
     fn wrap<W>(self, wrap: W) -> Wrapped<Self, C, W>
     where
@@ -44,11 +41,4 @@ pub trait HandlerExt<'a, C> {
     {
         Wrapped::new(self, wrap)
     }
-}
-
-impl<'a, C, H> HandlerExt<'a, C> for H
-where
-    H: Handler<'a, C>,
-    C: WithContext<'a>,
-{
 }

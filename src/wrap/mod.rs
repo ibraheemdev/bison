@@ -1,4 +1,8 @@
+//! Asynchronous HTTP middleware.
+
 mod wrap_fn;
+
+#[doc(hidden)]
 pub use wrap_fn::__internal_wrap_fn;
 
 use crate::bounded::{BoxFuture, Rc, Send, Sync};
@@ -7,49 +11,47 @@ use crate::handler::Erased;
 use crate::http::{Request, Response};
 use crate::{Error, Responder};
 
+/// Middleware that wraps around the rest of the chain.
 #[crate::async_trait_internal]
 pub trait Wrap: Send + Sync + 'static {
+    /// An error that can occur when calling this middleware.
     type Error: IntoResponseError;
 
-    async fn call<'a>(&self, req: &Request, next: impl Next + 'a) -> Result<Response, Self::Error>;
-}
+    /// Call the middleware with a request, and the next
+    /// handler in the chain.
+    async fn call(&self, req: &Request, next: &impl Next) -> Result<Response, Self::Error>;
 
-impl<W: Wrap> Wrap for Rc<W> {
-    type Error = W::Error;
-
-    fn call<'a, 'b, 'c, 'o>(
-        &'b self,
-        req: &'c Request,
-        next: impl Next + 'a,
-    ) -> BoxFuture<'o, Result<Response, Self::Error>>
+    /// Add another middleware to the chain.
+    ///
+    /// The returned middleware will pass `self` to
+    /// the given middleware as the next parameter.
+    fn and<W>(self, wrap: W) -> And<Self, W>
     where
-        'a: 'o,
-        'b: 'o,
-        'c: 'o,
+        W: Wrap,
+        Self: Sized,
     {
-        W::call(self, req, next)
+        And {
+            inner: self,
+            outer: wrap,
+        }
     }
 }
 
+/// The next handler in the middleware chain.
 #[crate::async_trait_internal]
 pub trait Next: Send + Sync {
+    /// Call the handler with the request.
     async fn call(&self, req: &Request) -> Result<Response, Error>;
 }
 
-impl<I: Next> Next for &I {
-    fn call<'a, 'b, 'o>(&'a self, req: &'b Request) -> BoxFuture<'o, Result<Response, Error>>
-    where
-        'a: 'o,
-        'b: 'o,
-    {
-        I::call(self, req)
-    }
-}
-
+/// Middleware that calls next with no extra processing.
+///
+/// This is useful in generic code as a base middleware type.
 #[non_exhaustive]
 pub struct Call;
 
 impl Call {
+    /// Create a new instance of this type.
     pub fn new() -> Self {
         Self
     }
@@ -59,14 +61,17 @@ impl Call {
 impl Wrap for Call {
     type Error = Error;
 
-    async fn call<'a>(&self, req: &Request, next: impl Next + 'a) -> Result<Response, Self::Error> {
+    async fn call(&self, req: &Request, next: &impl Next) -> Result<Response, Self::Error> {
         next.call(req).await
     }
 }
 
+/// A combination of two middlewares.
+///
+/// See [`Wrap::and`] for details.
 pub struct And<I, O> {
-    pub inner: I,
-    pub outer: O,
+    inner: I,
+    outer: O,
 }
 
 #[crate::async_trait_internal]
@@ -77,11 +82,11 @@ where
 {
     type Error = O::Error;
 
-    async fn call<'a>(&self, req: &Request, next: impl Next + 'a) -> Result<Response, Self::Error> {
+    async fn call(&self, req: &Request, next: &impl Next) -> Result<Response, Self::Error> {
         self.outer
             .call(
                 req,
-                And {
+                &And {
                     inner: next,
                     outer: &self.inner,
                 },
@@ -105,7 +110,7 @@ where
     }
 }
 
-pub struct DynNext<'bison>(pub &'bison Erased);
+pub(crate) struct DynNext<'bison>(pub &'bison Erased);
 
 impl<'bison> DynNext<'bison> {
     pub fn new(handler: &'bison Erased) -> Self {
@@ -117,5 +122,32 @@ impl<'bison> DynNext<'bison> {
 impl<'bison> Next for DynNext<'bison> {
     async fn call(&self, req: &Request) -> Result<Response, Error> {
         self.0.call(req).await
+    }
+}
+
+impl<W: Wrap> Wrap for Rc<W> {
+    type Error = W::Error;
+
+    fn call<'a, 'b, 'c, 'o>(
+        &'a self,
+        req: &'b Request,
+        next: &'c impl Next,
+    ) -> BoxFuture<'o, Result<Response, Self::Error>>
+    where
+        'a: 'o,
+        'b: 'o,
+        'c: 'o,
+    {
+        W::call(self, req, next)
+    }
+}
+
+impl<I: Next> Next for &I {
+    fn call<'a, 'b, 'o>(&'a self, req: &'b Request) -> BoxFuture<'o, Result<Response, Error>>
+    where
+        'a: 'o,
+        'b: 'o,
+    {
+        I::call(self, req)
     }
 }

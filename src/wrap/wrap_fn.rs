@@ -1,11 +1,12 @@
 use crate::bounded::{Send, Sync};
 use crate::error::IntoResponseError;
 use crate::http::{Request, Response};
-use crate::{Next, Wrap};
+use crate::wrap::{Next, Wrap};
 
 use std::future::Future;
 use std::marker::PhantomData;
 
+/// Create middleware from a closure.
 #[macro_export]
 macro_rules! wrap_fn {
     (|$req:ident, $next:ident| $body:expr) => {{
@@ -20,7 +21,7 @@ macro_rules! wrap_fn {
             }
         }
 
-        ::bison::__internal_wrap_fn(wrap)
+        ::bison::wrap::__internal_wrap_fn(wrap)
     }};
 }
 
@@ -58,11 +59,7 @@ where
     {
         type Error = E;
 
-        async fn call<'b>(
-            &self,
-            req: &Request,
-            next: impl Next + 'b,
-        ) -> Result<Response, Self::Error> {
+        async fn call(&self, req: &Request, next: &impl Next) -> Result<Response, Self::Error> {
             self.0.call(req, &next).await
         }
     }

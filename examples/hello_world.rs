@@ -1,4 +1,4 @@
-use bison::extract::{path, query, state, transform::Optional};
+use bison::extract::{state, Optional};
 use bison::{Bison, Context};
 
 struct State;
