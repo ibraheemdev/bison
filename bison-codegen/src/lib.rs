@@ -88,9 +88,9 @@ fn expand(input: DeriveInput) -> Result<TokenStream> {
 
     let context = quote! {
         impl<'req> ::bison::Context<'req> for #ty #where_clause {
-            type Future = ::bison::bounded::BoxFuture<'req, Result<Self, ::bison::Error>>;
+            type Future = ::bison::bounded::BoxFuture<'req, Result<Self, ::bison::Rejection>>;
 
-            fn extract(req: &'req ::bison::http::Request) ->  Self::Future {
+            fn extract(req: &'req ::bison::Request) ->  Self::Future {
                 Box::pin(async move { Ok(#name { #(#fields)* }) })
             }
         }
@@ -98,13 +98,13 @@ fn expand(input: DeriveInput) -> Result<TokenStream> {
 
     let with_context = match ty_lifetime {
         Some(_) => quote! {
-            impl<'req, 'any> ::bison::WithContext<'req> for #name<'any> #where_clause {
+            impl<'req, 'any> ::bison::handler::WithContext<'req> for #name<'any> #where_clause {
                 type Context = #name<'req>;
             }
         },
 
         None => quote! {
-            impl<'req> ::bison::WithContext<'req> for #name #where_clause {
+            impl<'req> ::bison::handler::WithContext<'req> for #name #where_clause {
                 type Context = #name;
             }
         },
@@ -152,18 +152,20 @@ fn extract(field: &Field) -> Result<TokenStream> {
         };
 
         return Ok(quote_spanned! { ty.span() =>
-            let result: ::std::result::Result<<#ty as ::bison::extract::Transform<_>>::Ok, ::bison::Error> =
+            let result: ::std::result::Result<<#ty as ::bison::extract::Transform<_>>::Ok, ::bison::Rejection> =
                 #extractor(req, #param)
-                    .map_err(::bison::Error::from);
+                    .await
+                    .map_err(::bison::Rejection::from);
 
             ::bison::extract::Transform::transform(result)?
         });
     }
 
     return Ok(quote_spanned! { field.ty.span() =>
-        let result: ::std::result::Result<<#ty as ::bison::extract::Transform<_>>::Ok, ::bison::Error> =
+        let result: ::std::result::Result<<#ty as ::bison::extract::Transform<_>>::Ok, ::bison::Rejection> =
             ::bison::extract::default(req, ::bison::extract::arg::DefaultArgument::new(#field_name))
-                .map_err(::bison::Error::from);
+                .await
+                .map_err(::bison::Rejection::from);
 
         ::bison::extract::Transform::transform(result)?
     });

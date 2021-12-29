@@ -9,11 +9,11 @@ mod transform;
 
 pub mod arg;
 
-pub use body::{body, BodyConfig, BodyError, FromBytes};
-pub use default::{default, DefaultError};
-pub use path::{path, FromPath, PathError};
-pub use query::{query, FromQuery, QueryError};
-pub use state::{state, StateError};
+pub use body::{body, BodyConfig, BodyRejection, FromBytes};
+pub use default::{default, DefaultRejection};
+pub use path::{path, FromPath, PathRejection};
+pub use query::{query, FromQuery, QueryRejection};
+pub use state::{state, StateRejection};
 pub use transform::{Optional, Transform};
 
 pub(crate) fn setup(req: &mut crate::Request) {

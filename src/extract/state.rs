@@ -7,7 +7,7 @@ use std::fmt;
 /// Extracts application state from a request.
 ///
 /// Application state can be injected with [`Bison::inject`](crate::Bison::inject).
-pub fn state<'req, T>(req: &'req Request, _: ()) -> Result<&'req T, StateError>
+pub async fn state<'req, T>(req: &'req Request, _: ()) -> Result<&'req T, StateRejection>
 where
     T: State,
 {
@@ -15,7 +15,7 @@ where
         .get::<state::Map>()
         .unwrap()
         .get::<T>()
-        .ok_or(StateError {
+        .ok_or(StateRejection {
             ty: std::any::type_name::<T>(),
         })
 }
@@ -24,17 +24,17 @@ where
 ///
 /// Returns a 400 response when used as a rejection.
 #[derive(Debug)]
-pub struct StateError {
+pub struct StateRejection {
     ty: &'static str,
 }
 
-impl fmt::Display for StateError {
+impl fmt::Display for StateRejection {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "No state injected of type `{}`", self.ty)
     }
 }
 
-impl Reject for StateError {
+impl Reject for StateRejection {
     fn reject(self: Box<Self>, _: &Request) -> Response {
         ResponseBuilder::new()
             .status(StatusCode::BAD_REQUEST)

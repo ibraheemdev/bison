@@ -1,3 +1,4 @@
+use crate::bounded::BoxError;
 use crate::extract::arg::ParamName;
 use crate::http::{Body, Request, Response, ResponseBuilder, StatusCode};
 use crate::Reject;
@@ -31,16 +32,17 @@ use once_cell::sync::OnceCell;
 ///     # Default::default()
 /// }
 /// ```
-pub fn query<'req, T>(req: &'req Request, name: ParamName) -> Result<T, QueryError<T::Error>>
+pub async fn query<'req, T>(req: &'req Request, name: ParamName) -> Result<T, QueryRejection>
 where
     T: FromQuery<'req>,
 {
-    let param = name.0;
+    let name = name.0;
+    let error = QueryRejection::builder(name, std::any::type_name::<T>());
 
     let query = req
         .uri()
         .query()
-        .ok_or(QueryError(QueryErrorKind::NotFound(param)))?;
+        .ok_or(error.kind(QueryErrorKind::NotFound))?;
 
     let map = req
         .extensions()
@@ -49,15 +51,11 @@ where
         .0
         .get_or_try_init(|| {
             serde_urlencoded::from_str::<HashMap<String, String>>(query)
-                .map_err(|err| QueryError(QueryErrorKind::Deser(err)))
+                .map_err(|err| error.kind(QueryErrorKind::Deser(err)))
         })?;
 
-    let raw = map
-        .get(param)
-        .ok_or(QueryError(QueryErrorKind::NotFound(param)))?;
-
-    T::from_query(raw)
-        .map_err(|err| QueryError(QueryErrorKind::FromStr(std::any::type_name::<T>(), err)))
+    let raw = map.get(name).ok_or(error.kind(QueryErrorKind::NotFound))?;
+    T::from_query(raw).map_err(|err| error.kind(QueryErrorKind::FromQuery(err.into())))
 }
 
 #[derive(Default)]
@@ -69,7 +67,7 @@ pub(crate) struct CachedQuery(OnceCell<HashMap<String, String>>);
 /// extractor.
 pub trait FromQuery<'req>: Sized {
     /// Errors that can occur in [`from_query`](FromQuery::from_query).
-    type Error: fmt::Debug + fmt::Display + Send + Sync;
+    type Error: Into<BoxError>;
 
     /// Extract the type from a query segment.
     fn from_query(param: &'req str) -> Result<Self, Self::Error>;
@@ -114,38 +112,54 @@ from_path! {
 ///
 /// Returns a 400 response when used as a rejection.
 #[derive(Debug)]
-pub struct QueryError<E>(QueryErrorKind<E>);
-
-#[derive(Debug)]
-enum QueryErrorKind<E> {
-    NotFound(&'static str),
-    Deser(serde_urlencoded::de::Error),
-    FromStr(&'static str, E),
+pub struct QueryRejection {
+    name: &'static str,
+    ty: &'static str,
+    kind: QueryErrorKind,
 }
 
-impl<E> fmt::Display for QueryError<E>
-where
-    E: fmt::Display,
-{
+impl QueryRejection {
+    pub fn builder(name: &'static str, ty: &'static str) -> Self {
+        Self {
+            name,
+            ty,
+            kind: QueryErrorKind::NotFound,
+        }
+    }
+
+    fn kind(&self, kind: QueryErrorKind) -> Self {
+        QueryRejection {
+            name: self.name,
+            ty: self.ty,
+            kind,
+        }
+    }
+}
+
+#[derive(Debug)]
+enum QueryErrorKind {
+    NotFound,
+    Deser(serde_urlencoded::de::Error),
+    FromQuery(BoxError),
+}
+
+impl fmt::Display for QueryRejection {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match &self.0 {
-            QueryErrorKind::NotFound(name) => write!(f, "query parameter '{}' not found", name),
+        match &self.kind {
+            QueryErrorKind::NotFound => write!(f, "query parameter '{}' not found", self.name),
             QueryErrorKind::Deser(err) => {
                 write!(f, "failed to deserialize query parameters: {}", err)
             }
-            QueryErrorKind::FromStr(ty, error) => write!(
+            QueryErrorKind::FromQuery(error) => write!(
                 f,
                 "failed to deserialize `{}` from query parameter: {}",
-                ty, error
+                self.ty, error
             ),
         }
     }
 }
 
-impl<E> Reject for QueryError<E>
-where
-    E: fmt::Debug + fmt::Display + Send + Sync,
-{
+impl Reject for QueryRejection {
     fn reject(self: Box<Self>, _: &Request) -> Response {
         ResponseBuilder::new()
             .status(StatusCode::BAD_REQUEST)

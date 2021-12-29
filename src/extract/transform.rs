@@ -6,7 +6,7 @@ use std::option::Option as StdOption;
 
 /// A trait that allows transforming the result of an extractor.
 pub trait Transform<T>: Sized {
-    /// The success value of this transformationm generally `T`.
+    /// The success value of this transformation; generally `T`.
     type Ok;
 
     /// Perform the transformation.

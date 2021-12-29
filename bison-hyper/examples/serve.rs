@@ -1,49 +1,31 @@
 use std::net::SocketAddr;
 
-use bison::extract::transform;
-use bison::{wrap_fn, Bison, Context, Next, Rejection, Request, Response, Wrap};
+use bison::extract::{body, path as param, state, Optional};
+use bison::{Bison, Context};
 use bison_hyper::{make, Server};
+
+struct State;
 
 #[derive(Context)]
 struct Hello<'req> {
+    #[cx(param)]
     name: usize,
-    baz: transform::Optional<usize>,
-    bar: transform::Optional<&'req str>,
+    #[cx(param)]
+    bar: Optional<&'req str>,
+    #[cx(state)]
+    state: &'req State,
+    #[cx(body)]
+    body: String,
 }
 
 async fn hello(cx: Hello<'_>) -> String {
-    format!("Name: {}, Bar: {:?}, Baz: {:?}", cx.name, cx.bar, cx.baz)
+    format!("Name: {}, Bar: {:?} Body: {}", cx.name, cx.bar, cx.body)
 }
 
 #[tokio::main]
 async fn main() {
-    let bison = Bison::new()
-        .get("/hello/:name", hello)
-        .wrap(Logger)
-        .wrap(wrap_fn!(|req, next| {
-            next.call(req).await.map_err(|err| {
-                eprintln!("{}", err);
-                err
-            })
-        }));
+    let bison = Bison::new().get("/hello/:name", hello).inject(State);
 
     let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
     Server::bind(&addr).serve(make(bison)).await.unwrap()
-}
-
-struct Logger;
-
-#[bison::async_trait]
-impl Wrap for Logger {
-    type Error = Rejection;
-
-    async fn call<'a>(&self, req: &Request, next: impl Next + 'a) -> Result<Response, Self::Error> {
-        match next.call(req).await {
-            Ok(res) => Ok(res),
-            Err(err) => {
-                eprintln!("{}", err);
-                Err(err)
-            }
-        }
-    }
 }

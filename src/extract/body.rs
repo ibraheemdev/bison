@@ -1,6 +1,6 @@
 use bytes::{Bytes, BytesMut};
 
-use crate::bounded::{BoxError, Send, Sync};
+use crate::bounded::BoxError;
 use crate::extract::arg::DefaultArgument;
 use crate::http::{header, Body, Request, Response, ResponseBuilder, StatusCode};
 use crate::Reject;
@@ -12,11 +12,14 @@ use std::fmt;
 ///
 /// This extractor can be used to read the request body into a `Vec<u8>`, `Bytes`,
 /// or `String`. [`BodyConfig`] can be used to configure the extraction process.
-pub async fn body<T>(req: &Request, config: BodyConfig) -> Result<T, BodyError<T::Error>>
+pub async fn body<T>(req: &Request, config: BodyConfig) -> Result<T, BodyRejection>
 where
     T: FromBytes,
 {
-    let body = req.body().take().ok_or(BodyError(BodyErrorKind::Taken))?;
+    let body = req
+        .body()
+        .take()
+        .ok_or(BodyRejection(BodyErrorKind::Taken))?;
 
     if req
         .headers()
@@ -25,17 +28,17 @@ where
         .and_then(|x| x.parse::<usize>().ok())
         > Some(config.limit)
     {
-        return Err(BodyError(BodyErrorKind::Overflow));
+        return Err(BodyRejection(BodyErrorKind::Overflow));
     }
 
     let mut buf = BytesMut::with_capacity(8192);
 
     loop {
         match body.chunk().await {
-            Some(Err(e)) => return Err(BodyError(BodyErrorKind::Io(e))),
+            Some(Err(e)) => return Err(BodyRejection(BodyErrorKind::Io(e))),
             Some(Ok(chunk)) => {
                 if buf.len() + chunk.len() > config.limit {
-                    return Err(BodyError(BodyErrorKind::Overflow));
+                    return Err(BodyRejection(BodyErrorKind::Overflow));
                 } else {
                     buf.extend_from_slice(&chunk);
                 }
@@ -44,7 +47,7 @@ where
         }
     }
 
-    T::from_bytes(buf.freeze()).map_err(|err| BodyError(BodyErrorKind::Decode(err)))
+    T::from_bytes(buf.freeze()).map_err(|err| BodyRejection(BodyErrorKind::Decode(err.into())))
 }
 
 /// A type that can be decoded from the raw bytes of the request body.
@@ -53,7 +56,7 @@ where
 /// extractor.
 pub trait FromBytes: Sized {
     /// Errors that can occur when decoding the bytes.
-    type Error: fmt::Debug + fmt::Display + Send + Sync;
+    type Error: Into<BoxError>;
 
     /// Decode the bytes of the request body.
     fn from_bytes(bytes: Bytes) -> Result<Self, Self::Error>;
@@ -110,20 +113,17 @@ impl DefaultArgument for BodyConfig {
 ///
 /// Returns a 400 response when used as a rejection.
 #[derive(Debug)]
-pub struct BodyError<E>(BodyErrorKind<E>);
+pub struct BodyRejection(BodyErrorKind);
 
 #[derive(Debug)]
-enum BodyErrorKind<E> {
+enum BodyErrorKind {
     Taken,
     Overflow,
     Io(BoxError),
-    Decode(E),
+    Decode(BoxError),
 }
 
-impl<E> fmt::Display for BodyError<E>
-where
-    E: fmt::Display,
-{
+impl fmt::Display for BodyRejection {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.0 {
             BodyErrorKind::Io(err) => {
@@ -142,10 +142,7 @@ where
     }
 }
 
-impl<E> Reject for BodyError<E>
-where
-    E: fmt::Debug + fmt::Display + Send + Sync,
-{
+impl Reject for BodyRejection {
     fn reject(self: Box<Self>, _: &Request) -> Response {
         ResponseBuilder::new()
             .status(StatusCode::BAD_REQUEST)
