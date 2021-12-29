@@ -9,6 +9,7 @@ mod transform;
 
 pub mod arg;
 
+pub use body::{body, BodyConfig, BodyError, FromBytes};
 pub use default::{default, DefaultError};
 pub use path::{path, FromPath, PathError};
 pub use query::{query, FromQuery, QueryError};

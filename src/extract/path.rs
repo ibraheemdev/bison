@@ -47,7 +47,7 @@ where
 
 /// The error returned by [`extract::path`](path()) if extraction fails.
 ///
-/// Returns a 404 response if used as a rejection.
+/// Returns a 400 response when used as a rejection.
 #[derive(Debug)]
 pub struct PathError<E> {
     error: Option<E>,
@@ -60,8 +60,8 @@ where
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.error {
-            Some(err) => write!(f, "error extracting param '{}': {}", self.name, err),
-            None => write!(f, "param '{}' not found", self.name),
+            Some(err) => write!(f, "error extracting route param '{}': {}", self.name, err),
+            None => write!(f, "route param '{}' not found", self.name),
         }
     }
 }
@@ -83,10 +83,11 @@ where
 /// Types implementing this trait can be used with the [`path`]
 /// extractor.
 pub trait FromPath<'req>: Sized {
+    /// Errors that can occur in [`from_path`](FromPath::from_path).
     type Error: fmt::Debug + fmt::Display + Send + Sync;
 
     /// Extract the type from a path segment.
-    fn from_path(param: &'req str) -> Result<Self, Self::Error>;
+    fn from_path(path: &'req str) -> Result<Self, Self::Error>;
 }
 
 impl<'req> FromPath<'req> for &'req str {

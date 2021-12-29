@@ -63,55 +63,12 @@ where
 #[derive(Default)]
 pub(crate) struct CachedQuery(OnceCell<HashMap<String, String>>);
 
-/// The error returned by [`extract::query`](query) if extraction fails.
-///
-/// Returns a 404 response when used as a rejection.
-#[derive(Debug)]
-pub struct QueryError<E>(QueryErrorKind<E>);
-
-#[derive(Debug)]
-enum QueryErrorKind<E> {
-    NotFound(&'static str),
-    Deser(serde_urlencoded::de::Error),
-    FromStr(&'static str, E),
-}
-
-impl<E> fmt::Display for QueryError<E>
-where
-    E: fmt::Display,
-{
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match &self.0 {
-            QueryErrorKind::NotFound(name) => write!(f, "query parameter '{}' not found", name),
-            QueryErrorKind::Deser(err) => {
-                write!(f, "failed to deserialize query parameters: {}", err)
-            }
-            QueryErrorKind::FromStr(ty, error) => write!(
-                f,
-                "failed to deserialize `{}` from query parameter: {}",
-                ty, error
-            ),
-        }
-    }
-}
-
-impl<E> Reject for QueryError<E>
-where
-    E: fmt::Debug + fmt::Display + Send + Sync,
-{
-    fn reject(self: Box<Self>, _: &Request) -> Response {
-        ResponseBuilder::new()
-            .status(StatusCode::BAD_REQUEST)
-            .body(Body::empty())
-            .unwrap()
-    }
-}
-
 /// A type that can be extracted from a URL query parameter.
 ///
 /// Types implementing this trait can be used with the [`query`]
 /// extractor.
 pub trait FromQuery<'req>: Sized {
+    /// Errors that can occur in [`from_query`](FromQuery::from_query).
     type Error: fmt::Debug + fmt::Display + Send + Sync;
 
     /// Extract the type from a query segment.
@@ -151,4 +108,48 @@ from_path! {
     bool, IpAddr, Ipv4Addr, Ipv6Addr, SocketAddrV4, SocketAddrV6, SocketAddr,
     NonZeroI8, NonZeroI16, NonZeroI32, NonZeroI64, NonZeroI128, NonZeroIsize,
     NonZeroU8, NonZeroU16, NonZeroU32, NonZeroU64, NonZeroU128, NonZeroUsize
+}
+
+/// The error returned by [`extract::query`](query) if extraction fails.
+///
+/// Returns a 400 response when used as a rejection.
+#[derive(Debug)]
+pub struct QueryError<E>(QueryErrorKind<E>);
+
+#[derive(Debug)]
+enum QueryErrorKind<E> {
+    NotFound(&'static str),
+    Deser(serde_urlencoded::de::Error),
+    FromStr(&'static str, E),
+}
+
+impl<E> fmt::Display for QueryError<E>
+where
+    E: fmt::Display,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match &self.0 {
+            QueryErrorKind::NotFound(name) => write!(f, "query parameter '{}' not found", name),
+            QueryErrorKind::Deser(err) => {
+                write!(f, "failed to deserialize query parameters: {}", err)
+            }
+            QueryErrorKind::FromStr(ty, error) => write!(
+                f,
+                "failed to deserialize `{}` from query parameter: {}",
+                ty, error
+            ),
+        }
+    }
+}
+
+impl<E> Reject for QueryError<E>
+where
+    E: fmt::Debug + fmt::Display + Send + Sync,
+{
+    fn reject(self: Box<Self>, _: &Request) -> Response {
+        ResponseBuilder::new()
+            .status(StatusCode::BAD_REQUEST)
+            .body(Body::empty())
+            .unwrap()
+    }
 }

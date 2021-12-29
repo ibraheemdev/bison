@@ -76,6 +76,11 @@ impl Body {
             b => Some(Body(AtomicRefCell::new(b))),
         }
     }
+
+    pub async fn chunk(&self) -> Option<Result<Bytes, BoxError>> {
+        let mut this = self;
+        crate::util::poll_fn(|cx| Pin::new(&mut this).poll_next(cx)).await
+    }
 }
 
 impl Stream for &Body {
