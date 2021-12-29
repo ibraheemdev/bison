@@ -42,7 +42,7 @@ where
     let query = req
         .uri()
         .query()
-        .ok_or(error.kind(QueryErrorKind::NotFound))?;
+        .ok_or(error.kind(QueryRejectionKind::NotFound))?;
 
     let map = req
         .extensions()
@@ -51,11 +51,13 @@ where
         .0
         .get_or_try_init(|| {
             serde_urlencoded::from_str::<HashMap<String, String>>(query)
-                .map_err(|err| error.kind(QueryErrorKind::Deser(err)))
+                .map_err(|err| error.kind(QueryRejectionKind::Deser(err)))
         })?;
 
-    let raw = map.get(name).ok_or(error.kind(QueryErrorKind::NotFound))?;
-    T::from_query(raw).map_err(|err| error.kind(QueryErrorKind::FromQuery(err.into())))
+    let raw = map
+        .get(name)
+        .ok_or(error.kind(QueryRejectionKind::NotFound))?;
+    T::from_query(raw).map_err(|err| error.kind(QueryRejectionKind::FromQuery(err.into())))
 }
 
 #[derive(Default)]
@@ -115,7 +117,7 @@ from_path! {
 pub struct QueryRejection {
     name: &'static str,
     ty: &'static str,
-    kind: QueryErrorKind,
+    kind: QueryRejectionKind,
 }
 
 impl QueryRejection {
@@ -123,11 +125,11 @@ impl QueryRejection {
         Self {
             name,
             ty,
-            kind: QueryErrorKind::NotFound,
+            kind: QueryRejectionKind::NotFound,
         }
     }
 
-    fn kind(&self, kind: QueryErrorKind) -> Self {
+    fn kind(&self, kind: QueryRejectionKind) -> Self {
         QueryRejection {
             name: self.name,
             ty: self.ty,
@@ -137,7 +139,7 @@ impl QueryRejection {
 }
 
 #[derive(Debug)]
-enum QueryErrorKind {
+enum QueryRejectionKind {
     NotFound,
     Deser(serde_urlencoded::de::Error),
     FromQuery(BoxError),
@@ -146,11 +148,11 @@ enum QueryErrorKind {
 impl fmt::Display for QueryRejection {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.kind {
-            QueryErrorKind::NotFound => write!(f, "query parameter '{}' not found", self.name),
-            QueryErrorKind::Deser(err) => {
+            QueryRejectionKind::NotFound => write!(f, "query parameter '{}' not found", self.name),
+            QueryRejectionKind::Deser(err) => {
                 write!(f, "failed to deserialize query parameters: {}", err)
             }
-            QueryErrorKind::FromQuery(error) => write!(
+            QueryRejectionKind::FromQuery(error) => write!(
                 f,
                 "failed to deserialize `{}` from query parameter: {}",
                 self.ty, error
@@ -161,8 +163,15 @@ impl fmt::Display for QueryRejection {
 
 impl Reject for QueryRejection {
     fn reject(self, _: &Request) -> Response {
+        let status = match self.kind {
+            QueryRejectionKind::FromQuery(_) | QueryRejectionKind::Deser(_) => {
+                StatusCode::BAD_REQUEST
+            }
+            QueryRejectionKind::NotFound => StatusCode::NOT_FOUND,
+        };
+
         ResponseBuilder::new()
-            .status(StatusCode::BAD_REQUEST)
+            .status(status)
             .body(Body::empty())
             .unwrap()
     }

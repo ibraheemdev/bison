@@ -35,12 +35,12 @@ where
     let name = name.0;
 
     let param = req.param(name).ok_or(PathRejection {
-        error: None,
         name: name.to_owned(),
+        kind: PathRejectionKind::NotFound,
     })?;
 
     T::from_path(param).map_err(|e| PathRejection {
-        error: Some(e.into()),
+        kind: PathRejectionKind::FromPath(e.into()),
         name: name.to_owned(),
     })
 }
@@ -93,27 +93,38 @@ from_path! {
 }
 
 /// The error returned by [`extract::path`](path()) if extraction fails.
-///
-/// Returns a 400 response when used as a rejection.
 #[derive(Debug)]
 pub struct PathRejection {
-    error: Option<BoxError>,
     name: String,
+    kind: PathRejectionKind,
+}
+
+#[derive(Debug)]
+enum PathRejectionKind {
+    FromPath(BoxError),
+    NotFound,
 }
 
 impl fmt::Display for PathRejection {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match &self.error {
-            Some(err) => write!(f, "error extracting route param '{}': {}", self.name, err),
-            None => write!(f, "route param '{}' not found", self.name),
+        match &self.kind {
+            PathRejectionKind::FromPath(err) => {
+                write!(f, "error extracting route param '{}': {}", self.name, err)
+            }
+            PathRejectionKind::NotFound => write!(f, "route param '{}' not found", self.name),
         }
     }
 }
 
 impl Reject for PathRejection {
     fn reject(self, _: &Request) -> Response {
+        let status = match self.kind {
+            PathRejectionKind::FromPath(_) => StatusCode::BAD_REQUEST,
+            PathRejectionKind::NotFound => StatusCode::NOT_FOUND,
+        };
+
         ResponseBuilder::new()
-            .status(StatusCode::BAD_REQUEST)
+            .status(status)
             .body(Body::empty())
             .unwrap()
     }
