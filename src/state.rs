@@ -1,6 +1,13 @@
 use std::sync::Arc;
 
+/// Application level state.
+///
+/// Types implementing this trait can be injected
+/// into the application with [`Bison::inject`](crate::Bison::inject).
+///
+/// You should never have to implement [`State`] manually.
 pub trait State: Send + Sync + 'static {}
+
 impl<T> State for T where T: Send + Sync + 'static {}
 
 #[derive(Clone)]

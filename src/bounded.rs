@@ -22,6 +22,7 @@ mod not_send {
     pub type BoxStream<'a, T> = Pin<Box<dyn Stream<Item = T> + 'a>>;
     pub type BoxError = Box<dyn Error>;
 
+    pub use std::cell::RefCell;
     pub use std::rc::Rc;
 
     pub use bison_codegen::async_trait_not_send as async_trait;
@@ -42,6 +43,9 @@ mod send {
 
     /// An dynamically typed [`Error`].
     pub type BoxError = Box<dyn Error + Send + Sync>;
+
+    #[doc(inline)]
+    pub use crate::util::AtomicRefCell;
 
     pub use std::sync::Arc as Rc;
 

@@ -1,6 +1,7 @@
 use crate::context::WithContext;
 use crate::extract;
 use crate::handler::{self, Handler};
+use crate::http::ext::Cache;
 use crate::http::{Method, Request, Response};
 use crate::router::{Router, Scope};
 use crate::state::{self, State};
@@ -177,7 +178,9 @@ where
     /// or [`bison_actix`].
     pub async fn serve(&self, mut req: Request) -> Response {
         extract::setup(&mut req);
+        req.extensions_mut().insert(Cache::default());
         req.extensions_mut().insert(self.state.clone());
+
         self.router.serve(req).await
     }
 }

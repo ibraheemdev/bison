@@ -1,12 +1,14 @@
 use std::cell::UnsafeCell;
 use std::sync::atomic::{AtomicBool, Ordering};
 
+/// A thread-safe, mutable memory location with dynamically checked borrow rules.
 pub struct AtomicRefCell<T> {
     borrowed: AtomicBool,
     value: UnsafeCell<T>,
 }
 
 impl<T> AtomicRefCell<T> {
+    /// Create a new [`AtomicRefCell`] holding the given value.
     pub fn new(value: T) -> Self {
         Self {
             borrowed: AtomicBool::new(false),
@@ -14,6 +16,13 @@ impl<T> AtomicRefCell<T> {
         }
     }
 
+    /// Mutably borrows the wrapped value.
+    ///
+    /// The borrow lasts until the returned `RefMut` exit scope.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the value is currently borrowed.
     pub fn borrow_mut(&self) -> RefMut<'_, T> {
         // synchronizes with the Release store in RefMut::drop
         if self.borrowed.swap(true, Ordering::Acquire) {
@@ -30,6 +39,7 @@ impl<T> AtomicRefCell<T> {
 unsafe impl<T: Send> Send for AtomicRefCell<T> {}
 unsafe impl<T: Send> Sync for AtomicRefCell<T> {}
 
+/// A wrapper type for a mutably borrowed value from an [`AtomicRefCell`].
 pub struct RefMut<'b, T> {
     value: *mut T,
     borrowed: &'b AtomicBool,

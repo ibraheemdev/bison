@@ -7,8 +7,8 @@ use bison_hyper::{make, Server};
 #[derive(Context)]
 struct Hello<'req> {
     name: usize,
-    baz: transform::Option<usize>,
-    bar: transform::Option<&'req str>,
+    baz: transform::Optional<usize>,
+    bar: transform::Optional<&'req str>,
 }
 
 async fn hello(cx: Hello<'_>) -> String {

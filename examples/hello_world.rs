@@ -1,25 +1,20 @@
-use bison::extract::{path, query, transform};
+use bison::extract::{path, query, state, transform::Optional};
 use bison::{Bison, Context};
+
+struct State;
 
 #[derive(Context)]
 struct Hello<'req> {
-    #[cx(path = "_name")]
     name: usize,
-    #[cx(query = "bar")]
-    bar: transform::Option<&'req str>,
-    #[cx(query = "baz")]
-    baz: transform::Option<&'req str>,
+    bar: Optional<&'req str>,
+    #[cx(state)]
+    state: &'req State,
 }
 
 async fn hello(cx: Hello<'_>) -> String {
-    format!(
-        "Name: {}, Bar: {:?}, Baz: {:?}",
-        cx.name,
-        cx.bar.into_inner(),
-        cx.baz.into_inner()
-    )
+    format!("Name: {}, Bar: {:?}", cx.name, cx.bar)
 }
 
 fn main() {
-    let _bison = Bison::new().get("/hello/:_name", hello);
+    let _bison = Bison::new().get("/hello/:name", hello).inject(State);
 }
