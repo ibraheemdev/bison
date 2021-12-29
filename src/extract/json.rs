@@ -69,7 +69,6 @@ fn is_json(req: &Request) -> bool {
     }
 }
 
-/// The error returned by [`extract::json`](json) if extraction fails.
 #[derive(Debug)]
 pub struct JsonRejection(JsonRejectionKind);
 
