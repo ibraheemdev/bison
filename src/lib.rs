@@ -1,5 +1,5 @@
 mod bison;
-mod responder;
+mod respond;
 mod router;
 mod state;
 mod util;
@@ -17,7 +17,7 @@ util::doc_inline! {
     pub use self::bison::Bison;
     pub use self::handler::{Context};
     pub use self::reject::{Rejection, Reject};
-    pub use self::responder::Responder;
+    pub use self::respond::Respond;
     pub use self::router::Scope;
     pub use self::state::State;
     pub use bison_codegen::Context;

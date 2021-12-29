@@ -4,7 +4,7 @@ pub use scope::Scope;
 use crate::http::{self, header, Body, Method, Request, Response, ResponseBuilder, StatusCode};
 use crate::reject::IntoRejection;
 use crate::wrap::{Call, DynNext, Wrap};
-use crate::{handler, Responder};
+use crate::{handler, Respond};
 
 use std::collections::HashMap;
 

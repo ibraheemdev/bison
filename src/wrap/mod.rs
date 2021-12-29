@@ -9,7 +9,7 @@ use crate::bounded::{BoxFuture, Rc, Send, Sync};
 use crate::handler::Erased;
 use crate::http::{Request, Response};
 use crate::reject::IntoRejection;
-use crate::{Rejection, Responder};
+use crate::{Rejection, Respond};
 
 /// Middleware that wraps around the rest of the chain.
 #[crate::async_trait_internal]

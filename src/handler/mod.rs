@@ -13,7 +13,7 @@ pub use wrapped::Wrapped;
 
 use crate::bounded::{Send, Sync};
 use crate::reject::IntoRejection;
-use crate::{Responder, Wrap};
+use crate::{Respond, Wrap};
 
 use std::future::Future;
 
@@ -26,7 +26,7 @@ where
     C: WithContext<'a>,
 {
     /// The handler's response.
-    type Response: Responder;
+    type Response: Respond;
 
     /// An error that can occur when calling the handler.
     type Rejection: IntoRejection;

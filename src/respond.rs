@@ -5,15 +5,24 @@ use crate::http::{header, Body, Bytes, Response, ResponseBuilder, StatusCode};
 use crate::reject::{IntoRejection, NotFound, Rejection};
 
 /// A type that can be converted into an HTTP response.
-pub trait Responder {
+pub trait Respond {
     /// An error that can occur during the conversion.
     type Rejection: IntoRejection;
 
     /// Convert into an HTTP response.
     fn respond(self) -> Result<Response, Self::Rejection>;
+
+    /// Returns a new responder that adds the provided status
+    /// code to the response.
+    fn with_status(self, status: StatusCode) -> (StatusCode, Self)
+    where
+        Self: Sized,
+    {
+        (status, self)
+    }
 }
 
-impl Responder for () {
+impl Respond for () {
     type Rejection = Infallible;
 
     fn respond(self) -> Result<Response, Infallible> {
@@ -21,7 +30,7 @@ impl Responder for () {
     }
 }
 
-impl Responder for Response {
+impl Respond for Response {
     type Rejection = Infallible;
 
     fn respond(self) -> Result<Response, Infallible> {
@@ -29,9 +38,9 @@ impl Responder for Response {
     }
 }
 
-impl<T> Responder for (StatusCode, T)
+impl<T> Respond for (StatusCode, T)
 where
-    T: Responder,
+    T: Respond,
 {
     type Rejection = T::Rejection;
 
@@ -43,9 +52,9 @@ where
     }
 }
 
-impl<T, E> Responder for Result<T, E>
+impl<T, E> Respond for Result<T, E>
 where
-    T: Responder,
+    T: Respond,
     E: IntoRejection,
 {
     type Rejection = Rejection;
@@ -56,9 +65,9 @@ where
     }
 }
 
-impl<T> Responder for Option<T>
+impl<T> Respond for Option<T>
 where
-    T: Responder,
+    T: Respond,
 {
     type Rejection = Rejection;
 
@@ -72,7 +81,7 @@ where
 
 macro_rules! with_content_type {
     ($($ty:ty $(|$into:ident)? => $content_type:literal),* $(,)?) => { $(
-        impl Responder for $ty {
+        impl Respond for $ty {
             type Rejection = Infallible;
 
             fn respond(self) -> Result<Response, Infallible> {

@@ -3,7 +3,7 @@
 
 use crate::bounded::{Send, Sync};
 use crate::handler::{Handler, WithContext};
-use crate::Responder;
+use crate::Respond;
 
 use std::convert::Infallible;
 use std::future::Future;
@@ -14,7 +14,7 @@ impl<'a, F, O, R> Handler<'a, ()> for F
 where
     F: Fn() -> O + Send + Sync,
     O: Future<Output = R> + Send + 'a,
-    R: Responder,
+    R: Respond,
 {
     type Response = R;
     type Future = InfallibleFut<O>;
@@ -30,7 +30,7 @@ where
     F: FnArgs<C>,
     F: Fn(<C as WithContext<'a>>::Context) -> O + Send + Sync,
     O: Future<Output = R> + Send + 'a,
-    R: Responder,
+    R: Respond,
     C: WithContext<'a>,
 {
     type Response = R;

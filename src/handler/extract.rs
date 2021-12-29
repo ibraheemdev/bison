@@ -1,7 +1,7 @@
 use crate::handler::{Handler, WithContext};
 use crate::http::{Request, Response};
 use crate::reject::IntoRejection;
-use crate::{wrap, Context, Rejection, Responder};
+use crate::{wrap, Context, Rejection, Respond};
 
 use std::future::Future;
 use std::marker::PhantomData;
