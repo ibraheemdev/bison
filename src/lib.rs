@@ -11,7 +11,7 @@ pub mod http;
 pub mod reject;
 pub mod wrap;
 
-doc_inline! {
+util::doc_inline! {
     pub use self::http::{Request, Response};
     pub use self::wrap::Wrap;
     pub use self::bison::Bison;
@@ -28,12 +28,3 @@ doc_inline! {
 /// See [`async_trait`](https://docs.rs/async-trait/latest/async_trait/) for details.
 pub use self::bounded::async_trait;
 pub(crate) use bounded::async_trait_internal;
-
-macro_rules! doc_inline {
-    ($($x:item)*) => {$(
-        #[doc(inline)]
-        $x
-    )*}
-}
-
-use doc_inline;

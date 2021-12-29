@@ -1,5 +1,7 @@
 use std::convert::Infallible;
 use std::future::{ready, Future, Ready};
+use std::io;
+use std::net::ToSocketAddrs;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::Context;
@@ -57,6 +59,22 @@ impl http_body::Body for BisonHttpBody {
 
         hint
     }
+}
+
+pub async fn serve<W>(addr: impl ToSocketAddrs, bison: Bison<W>) -> Result<(), io::Error>
+where
+    W: bison::Wrap + 'static,
+{
+    for addr in addr.to_socket_addrs()? {
+        if let Ok(builder) = hyper::Server::try_bind(&addr) {
+            return builder
+                .serve(make(bison))
+                .await
+                .map_err(|err| io::Error::new(io::ErrorKind::Other, err));
+        }
+    }
+
+    Err(io::Error::last_os_error())
 }
 
 pub fn make<W>(bison: Bison<W>) -> BisonMakeService<W>

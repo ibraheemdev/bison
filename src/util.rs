@@ -94,3 +94,19 @@ where
 
     PollFn(f).await
 }
+
+macro_rules! cfg_json {
+    ($($x:item)*) => {$(
+        #[cfg(feature = "json")]
+        $x
+    )*}
+}
+
+macro_rules! doc_inline {
+    ($($x:item)*) => {$(
+        #[doc(inline)]
+        $x
+    )*}
+}
+
+pub(crate) use {cfg_json, doc_inline};

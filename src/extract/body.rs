@@ -92,26 +92,29 @@ pub struct BodyConfig {
 }
 
 impl BodyConfig {
-    /// Create a [`BodyConfig`] instance and set maximum number of
-    /// that can be streamed.
+    /// Create a [`BodyConfig`] instance.
+    pub fn new() -> Self {
+        Self {
+            limit: 262_144, // (~256kB)
+        }
+    }
+
+    /// Set maximum number of bytes that can be streamed.
     ///
     /// By default the limit is 256Kb.
-    pub fn new(limit: usize) -> Self {
-        Self { limit }
+    pub fn limit(mut self, limit: usize) -> Self {
+        self.limit = limit;
+        self
     }
 }
 
 impl DefaultArgument for BodyConfig {
     fn new(_: &'static str) -> Self {
-        BodyConfig {
-            limit: 262_144, // (~256kB)
-        }
+        Self::new()
     }
 }
 
 /// The error returned by [`extract::body`](body) if extraction fails.
-///
-/// Returns a 400 response when used as a rejection.
 #[derive(Debug)]
 pub struct BodyRejection(BodyErrorKind);
 
@@ -126,17 +129,11 @@ enum BodyErrorKind {
 impl fmt::Display for BodyRejection {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.0 {
-            BodyErrorKind::Io(err) => {
-                write!(f, "failed to read request body: {}", err)
-            }
-            BodyErrorKind::Overflow => {
-                write!(f, "body larger than limit")
-            }
+            BodyErrorKind::Io(err) => write!(f, "failed to read request body: {}", err),
+            BodyErrorKind::Overflow => write!(f, "body larger than limit"),
+            BodyErrorKind::Decode(err) => write!(f, "failed to extract body from request: {}", err),
             BodyErrorKind::Taken => {
                 write!(f, "cannot have two body extractors for a single handler")
-            }
-            BodyErrorKind::Decode(err) => {
-                write!(f, "failed to extract body from request: {}", err)
             }
         }
     }
@@ -144,8 +141,14 @@ impl fmt::Display for BodyRejection {
 
 impl Reject for BodyRejection {
     fn reject(self: Box<Self>, _: &Request) -> Response {
+        let status = match self.0 {
+            BodyErrorKind::Taken => StatusCode::INTERNAL_SERVER_ERROR,
+            BodyErrorKind::Overflow => StatusCode::PAYLOAD_TOO_LARGE,
+            BodyErrorKind::Io(_) | BodyErrorKind::Decode(_) => StatusCode::BAD_REQUEST,
+        };
+
         ResponseBuilder::new()
-            .status(StatusCode::BAD_REQUEST)
+            .status(status)
             .body(Body::empty())
             .unwrap()
     }

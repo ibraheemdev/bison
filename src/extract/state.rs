@@ -21,8 +21,6 @@ where
 }
 
 /// The error returned by [`extract::state`](state()) if extraction fails.
-///
-/// Returns a 400 response when used as a rejection.
 #[derive(Debug)]
 pub struct StateRejection {
     ty: &'static str,
@@ -37,7 +35,7 @@ impl fmt::Display for StateRejection {
 impl Reject for StateRejection {
     fn reject(self: Box<Self>, _: &Request) -> Response {
         ResponseBuilder::new()
-            .status(StatusCode::BAD_REQUEST)
+            .status(StatusCode::INTERNAL_SERVER_ERROR)
             .body(Body::empty())
             .unwrap()
     }

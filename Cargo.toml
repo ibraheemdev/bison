@@ -19,16 +19,21 @@ serde = "1.0.130"
 serde_urlencoded = "0.7.0"
 pin-project-lite = "0.2.7"
 once_cell = "1.9.0"
-
-[dev-dependencies]
-serde = { version = "1.0.130", features = ["derive"] }
-
-[features]
-default = []
-not-send = []
+serde_json = { version = "1.0.73", optional = true }
+mime = "0.3.16"
 
 [workspace]
 members = [
     "bison-codegen",
     "bison-hyper"
 ]
+
+[features]
+default = ["serde_json"]
+json = ["serde_json"]
+not-send = []
+
+[dev-dependencies]
+bison-hyper = { path = "./bison-hyper" }
+serde = { version = "1.0.130", features = ["derive"] }
+tokio = { version = "1.10.0", features = ["full"] }

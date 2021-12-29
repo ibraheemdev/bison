@@ -1,6 +1,7 @@
 //! Extract context from a request.
 
 mod body;
+
 mod default;
 mod path;
 mod query;
@@ -15,6 +16,11 @@ pub use path::{path, FromPath, PathRejection};
 pub use query::{query, FromQuery, QueryRejection};
 pub use state::{state, StateRejection};
 pub use transform::{Optional, Transform};
+
+crate::util::cfg_json! {
+    mod json;
+    pub use json::json;
+}
 
 pub(crate) fn setup(req: &mut crate::Request) {
     req.extensions_mut().insert(query::CachedQuery::default());

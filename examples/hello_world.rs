@@ -1,22 +1,20 @@
-use bison::extract::{body, state, Optional};
 use bison::{Bison, Context};
-
-struct State;
 
 #[derive(Context)]
 struct Hello<'req> {
-    name: usize,
-    bar: Optional<&'req str>,
-    #[cx(state)]
-    state: &'req State,
-    #[cx(body)]
-    body: String,
+    name: &'req str,
+    age: u8,
 }
 
 async fn hello(cx: Hello<'_>) -> String {
-    format!("Name: {}, Bar: {:?}", cx.name, cx.bar)
+    format!("Hello, {} year old named {}!", cx.age, cx.name)
 }
 
-fn main() {
-    let _bison = Bison::new().get("/hello/:name", hello).inject(State);
+#[tokio::main]
+async fn main() {
+    let bison = Bison::new().get("/hello/:name/:age", hello);
+
+    bison_hyper::serve("localhost:3000", bison)
+        .await
+        .expect("serve failed")
 }
