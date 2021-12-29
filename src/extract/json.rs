@@ -90,9 +90,9 @@ impl fmt::Display for JsonRejection {
 }
 
 impl Reject for JsonRejection {
-    fn reject(self: Box<Self>, req: &Request) -> Response {
+    fn reject(self, req: &Request) -> Response {
         let status = match self.0 {
-            JsonRejectionKind::Body(err) => return Box::new(err).reject(req), // TODO
+            JsonRejectionKind::Body(err) => return Box::new(err).reject(req),
             JsonRejectionKind::ContentType | JsonRejectionKind::Deser(_) => StatusCode::BAD_REQUEST,
         };
 

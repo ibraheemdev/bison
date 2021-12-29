@@ -84,9 +84,9 @@ impl fmt::Display for FormRejection {
 }
 
 impl Reject for FormRejection {
-    fn reject(self: Box<Self>, req: &Request) -> Response {
+    fn reject(self, req: &Request) -> Response {
         let status = match self.0 {
-            FormRejectionKind::Body(err) => return Box::new(err).reject(req), // TODO
+            FormRejectionKind::Body(err) => return err.reject(req),
             FormRejectionKind::ContentType | FormRejectionKind::Deser(_) => StatusCode::BAD_REQUEST,
         };
 

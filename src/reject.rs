@@ -10,18 +10,18 @@ use std::fmt::{self, Debug, Display};
 /// An error capable rejecting a request with an HTTP error esponse.
 pub trait Reject: Debug + Display + Send + Sync {
     /// Reject the request with an HTTP error esponse
-    fn reject(self: Box<Self>, req: &Request) -> Response;
+    fn reject(self, req: &Request) -> Response;
 }
 
 impl Reject for Infallible {
-    fn reject(self: Box<Self>, _: &Request) -> Response {
+    fn reject(self, _: &Request) -> Response {
         unreachable!()
     }
 }
 
 /// A dynamically typed rejection.
 pub struct Rejection {
-    inner: Box<dyn Reject>,
+    inner: Box<dyn BoxedReject>,
 }
 
 impl Rejection {
@@ -39,6 +39,16 @@ impl Rejection {
     /// which cannot be implemented directly due to coherence rules.
     pub fn reject(self, req: &Request) -> Response {
         self.inner.reject(req)
+    }
+}
+
+trait BoxedReject: Reject {
+    fn reject(self: Box<Self>, _: &Request) -> Response;
+}
+
+impl<T: Reject> BoxedReject for T {
+    fn reject(self: Box<Self>, req: &Request) -> Response {
+        Reject::reject(*self, req)
     }
 }
 
@@ -109,7 +119,7 @@ impl IntoRejection for Response {
         }
 
         impl Reject for Impl {
-            fn reject(self: Box<Self>, _: &Request) -> Response {
+            fn reject(self, _: &Request) -> Response {
                 self.0
             }
         }
@@ -129,7 +139,7 @@ impl fmt::Display for NotFound {
 }
 
 impl Reject for NotFound {
-    fn reject(self: Box<Self>, _: &Request) -> Response {
+    fn reject(self, _: &Request) -> Response {
         ResponseBuilder::new()
             .status(StatusCode::NOT_FOUND)
             .body(Body::empty())

@@ -111,7 +111,7 @@ impl fmt::Display for PathRejection {
 }
 
 impl Reject for PathRejection {
-    fn reject(self: Box<Self>, _: &Request) -> Response {
+    fn reject(self, _: &Request) -> Response {
         ResponseBuilder::new()
             .status(StatusCode::BAD_REQUEST)
             .body(Body::empty())

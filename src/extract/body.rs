@@ -140,7 +140,7 @@ impl fmt::Display for BodyRejection {
 }
 
 impl Reject for BodyRejection {
-    fn reject(self: Box<Self>, _: &Request) -> Response {
+    fn reject(self, _: &Request) -> Response {
         let status = match self.0 {
             BodyErrorKind::Taken => StatusCode::INTERNAL_SERVER_ERROR,
             BodyErrorKind::Overflow => StatusCode::PAYLOAD_TOO_LARGE,

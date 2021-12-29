@@ -160,7 +160,7 @@ impl fmt::Display for QueryRejection {
 }
 
 impl Reject for QueryRejection {
-    fn reject(self: Box<Self>, _: &Request) -> Response {
+    fn reject(self, _: &Request) -> Response {
         ResponseBuilder::new()
             .status(StatusCode::BAD_REQUEST)
             .body(Body::empty())

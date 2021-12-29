@@ -33,7 +33,7 @@ impl fmt::Display for StateRejection {
 }
 
 impl Reject for StateRejection {
-    fn reject(self: Box<Self>, _: &Request) -> Response {
+    fn reject(self, _: &Request) -> Response {
         ResponseBuilder::new()
             .status(StatusCode::INTERNAL_SERVER_ERROR)
             .body(Body::empty())
