@@ -1,18 +1,15 @@
-use once_cell::sync::OnceCell;
-
-use super::OptionalArgument;
 use crate::error::ResponseError;
+use crate::extract::arg::ParamName;
 use crate::http::{Body, Request, Response, ResponseBuilder, StatusCode};
 
 use std::collections::HashMap;
 use std::convert::Infallible;
 use std::fmt;
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
-use std::num::{
-    NonZeroI128, NonZeroI16, NonZeroI32, NonZeroI64, NonZeroI8, NonZeroIsize, NonZeroU128,
-    NonZeroU16, NonZeroU32, NonZeroU64, NonZeroU8, NonZeroUsize,
-};
+use std::net::*;
+use std::num::*;
 use std::str::FromStr;
+
+use once_cell::sync::OnceCell;
 
 /// Extracts a query parameter from the request.
 ///
@@ -34,14 +31,11 @@ use std::str::FromStr;
 ///     # Default::default()
 /// }
 /// ```
-pub fn query<'req, T>(
-    req: &'req Request,
-    param: OptionalArgument<&'static str>,
-) -> Result<T, QueryError<T::Error>>
+pub fn query<'req, T>(req: &'req Request, name: ParamName) -> Result<T, QueryError<T::Error>>
 where
     T: FromQuery<'req>,
 {
-    let param = param.value.unwrap_or(param.field_name);
+    let param = name.0;
 
     let query = req
         .uri()

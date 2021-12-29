@@ -1,11 +1,10 @@
-use super::NoArgument;
 use crate::bounded::{Send, Sync};
 use crate::http::{Body, Request, Response, ResponseBuilder, StatusCode};
 use crate::ResponseError;
 
 use std::fmt;
 
-pub fn body<T>(req: &Request, param: NoArgument) -> Result<T, BodyError<T::Error>>
+pub fn body<T>(req: &Request, _: ()) -> Result<T, BodyError<T::Error>>
 where
     T: FromBody,
 {

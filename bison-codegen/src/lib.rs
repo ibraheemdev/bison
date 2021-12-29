@@ -143,13 +143,17 @@ fn extract(field: &Field) -> Result<TokenStream> {
         };
 
         let param = match param {
-            Some(param) => quote! { RequiredArgument::new(#field_name, #param) },
-            None => quote! { NoArgument::new(#field_name) },
+            Some(param) => {
+                quote_spanned! { ty.span() => ::bison::extract::Argument::new(#field_name, #param) }
+            }
+            None => {
+                quote_spanned! { ty.span() => ::bison::extract::DefaultArgument::new(#field_name) }
+            }
         };
 
         return Ok(quote_spanned! { ty.span() =>
             let result: ::std::result::Result<<#ty as ::bison::extract::Transform<_>>::Ok, ::bison::Error> =
-                #extractor(req, ::bison::extract::#param.into())
+                #extractor(req, #param)
                     .map_err(::bison::Error::from);
 
             ::bison::extract::Transform::transform(result)?
@@ -158,7 +162,7 @@ fn extract(field: &Field) -> Result<TokenStream> {
 
     return Ok(quote_spanned! { field.ty.span() =>
         let result: ::std::result::Result<<#ty as ::bison::extract::Transform<_>>::Ok, ::bison::Error> =
-            ::bison::extract::default(req, ::bison::extract::NoArgument::new(#field_name).into())
+            ::bison::extract::default(req, ::bison::extract::DefaultArgument::new(#field_name))
                 .map_err(::bison::Error::from);
 
         ::bison::extract::Transform::transform(result)?

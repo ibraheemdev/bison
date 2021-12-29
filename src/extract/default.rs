@@ -1,24 +1,21 @@
 use crate::error::ResponseError;
-use crate::extract::{path, query, FromPath, FromQuery, NoArgument};
+use crate::extract::arg::{FieldName, ParamName};
+use crate::extract::{path, query, FromPath, FromQuery};
 use crate::http::{Body, Request, Response, ResponseBuilder, StatusCode};
 
 use std::fmt;
-
-use super::OptionalArgument;
 
 /// The default extractor.
 ///
 /// This is the extractor used when no `#[cx(..)]` is given. It tries to extract
 /// the type using the [`path`](path()) extractor, and then the [`query`](query()) extractor,
 /// returning [`DefaultError`] if both fail.
-pub fn default<'req, T>(req: &'req Request, arg: NoArgument) -> Result<T, DefaultError>
+pub fn default<'req, T>(req: &'req Request, field_name: FieldName) -> Result<T, DefaultError>
 where
     T: FromPath<'req> + FromQuery<'req>,
 {
-    let arg = OptionalArgument::from(arg);
-
-    path(req, arg.clone())
-        .or_else(|_| query(req, arg))
+    path(req, ParamName(field_name.as_str()))
+        .or_else(|_| query(req, ParamName(field_name.as_str())))
         .map_err(|_| DefaultError {
             ty: std::any::type_name::<T>(),
         })

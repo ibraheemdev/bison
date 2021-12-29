@@ -1,15 +1,12 @@
 use crate::bounded::{Send, Sync};
 use crate::error::ResponseError;
-use crate::extract::OptionalArgument;
+use crate::extract::arg::ParamName;
 use crate::http::{Body, Request, RequestExt, Response, ResponseBuilder, StatusCode};
 
 use std::convert::Infallible;
 use std::fmt;
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
-use std::num::{
-    NonZeroI128, NonZeroI16, NonZeroI32, NonZeroI64, NonZeroI8, NonZeroIsize, NonZeroU128,
-    NonZeroU16, NonZeroU32, NonZeroU64, NonZeroU8, NonZeroUsize,
-};
+use std::net::*;
+use std::num::*;
 use std::str::FromStr;
 
 /// Extracts a route parameter from the request path.
@@ -31,14 +28,11 @@ use std::str::FromStr;
 ///
 /// let bison = Bison::new().get("/user/:id", get_user);
 /// ```
-pub fn path<'req, T>(
-    req: &'req Request,
-    param: OptionalArgument<&'static str>,
-) -> Result<T, PathError<T::Error>>
+pub fn path<'req, T>(req: &'req Request, name: ParamName) -> Result<T, PathError<T::Error>>
 where
     T: FromPath<'req>,
 {
-    let name = param.value.unwrap_or(param.field_name);
+    let name = name.0;
 
     let param = req.param(name).ok_or(PathError {
         error: None,

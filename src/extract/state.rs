@@ -1,4 +1,3 @@
-use super::NoArgument;
 use crate::error::ResponseError;
 use crate::http::{Body, Request, Response, ResponseBuilder, StatusCode};
 use crate::state::{self, State};
@@ -8,7 +7,7 @@ use std::fmt;
 /// Extracts application state from a request.
 ///
 /// Application state can be injected with [`Bison::inject`](crate::Bison::inject).
-pub fn state<'req, T>(req: &'req Request, _: NoArgument) -> Result<&'req T, StateError>
+pub fn state<'req, T>(req: &'req Request, _: ()) -> Result<&'req T, StateError>
 where
     T: State,
 {

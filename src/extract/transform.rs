@@ -74,12 +74,12 @@ impl TransformSpecialization {
 /// ```
 ///
 /// [`Option::None`]: std::option::Option::None
-pub struct Option<T> {
+pub struct Optional<T> {
     value: StdOption<T>,
     _t: TransformSpecialization,
 }
 
-impl<T> std::ops::Deref for Option<T> {
+impl<T> std::ops::Deref for Optional<T> {
     type Target = StdOption<T>;
 
     fn deref(&self) -> &Self::Target {
@@ -87,31 +87,31 @@ impl<T> std::ops::Deref for Option<T> {
     }
 }
 
-impl<T> std::ops::DerefMut for Option<T> {
+impl<T> std::ops::DerefMut for Optional<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.value
     }
 }
 
-impl<T> Option<T> {
+impl<T> Optional<T> {
     /// Convert into a [`std::Option`](std::option::Option).
     pub fn into_inner(self) -> StdOption<T> {
         self.value
     }
 }
 
-impl<T> Transform<T> for Option<T> {
+impl<T> Transform<T> for Optional<T> {
     type Ok = T;
 
     fn transform(result: Result<T, Error>) -> Result<Self, Error> {
-        Ok(Option {
+        Ok(Optional {
             value: result.ok(),
             _t: TransformSpecialization::new(),
         })
     }
 }
 
-impl<T> fmt::Debug for Option<T>
+impl<T> fmt::Debug for Optional<T>
 where
     T: fmt::Debug,
 {
