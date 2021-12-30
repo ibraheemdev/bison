@@ -1,7 +1,8 @@
 extern crate proc_macro;
 
-use proc_macro2::{Ident, TokenStream};
-use quote::{quote, quote_spanned, ToTokens};
+use proc_macro2::{Ident, TokenStream, TokenTree};
+use quote::{quote, quote_spanned};
+use syn::parse::{Parse, ParseStream, Peek};
 use syn::spanned::Spanned;
 use syn::*;
 
@@ -87,6 +88,7 @@ fn expand(input: DeriveInput) -> Result<TokenStream> {
     let (_, _, where_clause) = input.generics.split_for_impl();
 
     let context = quote! {
+        #[automatically_derived]
         impl<'req> ::bison::Context<'req> for #ty #where_clause {
             type Future = ::bison::bounded::BoxFuture<'req, Result<Self, ::bison::Rejection>>;
 
@@ -98,12 +100,14 @@ fn expand(input: DeriveInput) -> Result<TokenStream> {
 
     let with_context = match ty_lifetime {
         Some(_) => quote! {
+            #[automatically_derived]
             impl<'req, 'any> ::bison::handler::WithContext<'req> for #name<'any> #where_clause {
                 type Context = #name<'req>;
             }
         },
 
         None => quote! {
+            #[automatically_derived]
             impl<'req> ::bison::handler::WithContext<'req> for #name #where_clause {
                 type Context = #name;
             }
@@ -121,30 +125,15 @@ fn extract(field: &Field) -> Result<TokenStream> {
     let ty = &field.ty;
 
     for attr in &field.attrs {
-        let meta = match attr.parse_meta()? {
-            Meta::List(list) => list,
-            _ => return Err(bad_extractor(&attr)),
-        };
-
-        let ident = meta
-            .path
-            .get_ident()
-            .map(Ident::to_string)
-            .ok_or(bad_extractor(&attr))?;
-
-        if ident != "cx" || meta.nested.len() != 1 {
-            return Err(bad_extractor(meta));
+        if attr.path.get_ident().map(Ident::to_string).as_deref() != Some("cx") {
+            continue;
         }
 
-        let (extractor, param) = match meta.nested.first().unwrap() {
-            NestedMeta::Meta(Meta::NameValue(nv)) => (&nv.path, Some(&nv.lit)),
-            NestedMeta::Meta(Meta::Path(path)) => (path, None),
-            _ => return Err(bad_extractor(attr)),
-        };
+        let MyMeta { extractor, arg } = attr.parse_args()?;
 
-        let param = match param {
-            Some(param) => {
-                quote_spanned! { ty.span() => ::bison::extract::arg::Argument::new(#field_name, #param) }
+        let arg = match arg {
+            Some(arg) => {
+                quote_spanned! { ty.span() => ::bison::extract::arg::Argument::new(#field_name, #arg) }
             }
             None => {
                 quote_spanned! { ty.span() => ::bison::extract::arg::DefaultArgument::new(#field_name) }
@@ -153,7 +142,7 @@ fn extract(field: &Field) -> Result<TokenStream> {
 
         return Ok(quote_spanned! { ty.span() =>
             let result: ::std::result::Result<<#ty as ::bison::extract::Transform<_>>::Ok, ::bison::Rejection> =
-                #extractor(req, #param)
+                #extractor(req, #arg)
                     .await
                     .map_err(::bison::Rejection::from);
 
@@ -171,11 +160,33 @@ fn extract(field: &Field) -> Result<TokenStream> {
     });
 }
 
-fn bad_extractor(tokens: impl ToTokens) -> Error {
-    Error::new_spanned(
-        tokens,
-        "expected #[cx(extractor)] or #[cx(extractor = ...)]",
-    )
+struct MyMeta {
+    extractor: Expr,
+    arg: Option<Expr>,
+}
+
+impl Parse for MyMeta {
+    fn parse(input: parse::ParseStream) -> Result<Self> {
+        let extractor: Expr = syn::parse2(parse_until(input, Token![=])?)?;
+
+        let arg = if input.is_empty() {
+            None
+        } else {
+            let _: Token![=] = input.parse()?;
+            Some(input.parse::<Expr>()?)
+        };
+
+        Ok(MyMeta { extractor, arg })
+    }
+}
+
+fn parse_until<E: Peek>(input: ParseStream, end: E) -> Result<TokenStream> {
+    let mut tokens = TokenStream::new();
+    while !input.is_empty() && !input.peek(end) {
+        let next: TokenTree = input.parse()?;
+        tokens.extend(Some(next));
+    }
+    Ok(tokens)
 }
 
 #[proc_macro_attribute]
