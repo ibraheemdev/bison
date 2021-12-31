@@ -92,7 +92,7 @@ fn expand(input: DeriveInput) -> Result<TokenStream> {
         impl<'req> ::bison::Context<'req> for #ty #where_clause {
             type Future = ::bison::bounded::BoxFuture<'req, Result<Self, ::bison::Rejection>>;
 
-            fn extract(req: &'req ::bison::Request) ->  Self::Future {
+            fn extract(req: &'req mut ::bison::Request) ->  Self::Future {
                 Box::pin(async move { Ok(#name { #(#fields)* }) })
             }
         }
