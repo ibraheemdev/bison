@@ -9,15 +9,15 @@ use std::marker::PhantomData;
 /// Create middleware from a closure.
 #[macro_export]
 macro_rules! wrap_fn {
-    (|$req:ident, $next:ident| $body:expr) => {{
-        async fn wrap<'a>(
-            $req: &'a ::bison::Request,
-            $next: &'a dyn Next,
-        ) -> Result<::bison::Response, ::bison::Error> {
+    (async |$req:ident, $next:ident| $body:expr) => {{
+        async fn wrap(
+            $req: ::bison::Request,
+            $next: &dyn ::bison::wrap::Next,
+        ) -> Result<::bison::Response, ::bison::Rejection> {
             let response = $body;
             match response {
                 Ok(r) => Ok(r),
-                Err(e) => Err(::bison::Error::new(e)),
+                Err(e) => Err(::bison::Rejection::new(e)),
             }
         }
 
@@ -28,18 +28,18 @@ macro_rules! wrap_fn {
 pub trait WrapFn<'a, E>: Send + Sync + 'static {
     type F: Future<Output = Result<Response, E>> + Send + 'a;
 
-    fn call(&self, req: &'a Request, next: &'a dyn Next) -> Self::F;
+    fn call(&self, req: Request, next: &'a dyn Next) -> Self::F;
 }
 
 impl<'a, O, E, F> WrapFn<'a, E> for F
 where
-    F: Fn(&'a Request, &'a dyn Next) -> O + Send + Sync + 'static,
+    F: Fn(Request, &'a dyn Next) -> O + Send + Sync + 'static,
     O: Future<Output = Result<Response, E>> + Send + 'a,
     E: IntoRejection,
 {
     type F = O;
 
-    fn call(&self, req: &'a Request, next: &'a dyn Next) -> Self::F {
+    fn call(&self, req: Request, next: &'a dyn Next) -> Self::F {
         self(req, next)
     }
 }
@@ -59,8 +59,8 @@ where
     {
         type Rejection = E;
 
-        async fn call(&self, req: &Request, next: &impl Next) -> Result<Response, Self::Rejection> {
-            self.0.call(req, &next).await
+        async fn call(&self, req: Request, next: &impl Next) -> Result<Response, Self::Rejection> {
+            self.0.call(req, next).await
         }
     }
 

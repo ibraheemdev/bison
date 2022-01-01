@@ -6,7 +6,7 @@ mod wrap_fn;
 pub use wrap_fn::__internal_wrap_fn;
 
 use crate::bounded::{BoxFuture, Rc, Send, Sync};
-use crate::handler::Erased;
+use crate::handler::Handler;
 use crate::http::{Request, Response};
 use crate::reject::IntoRejection;
 use crate::{Rejection, Respond};
@@ -19,7 +19,7 @@ pub trait Wrap: Send + Sync + 'static {
 
     /// Call the middleware with a request, and the next
     /// handler in the chain.
-    async fn call(&self, req: &Request, next: &impl Next) -> Result<Response, Self::Rejection>;
+    async fn call(&self, req: Request, next: &impl Next) -> Result<Response, Self::Rejection>;
 
     /// Add another middleware to the chain.
     ///
@@ -41,7 +41,7 @@ pub trait Wrap: Send + Sync + 'static {
 #[crate::async_trait_internal]
 pub trait Next: Send + Sync {
     /// Call the handler with the request.
-    async fn call(&self, req: &Request) -> Result<Response, Rejection>;
+    async fn call(&self, req: Request) -> Result<Response, Rejection>;
 }
 
 /// Middleware that calls next with no extra processing.
@@ -61,7 +61,7 @@ impl Call {
 impl Wrap for Call {
     type Rejection = Rejection;
 
-    async fn call(&self, req: &Request, next: &impl Next) -> Result<Response, Self::Rejection> {
+    async fn call(&self, req: Request, next: &impl Next) -> Result<Response, Self::Rejection> {
         next.call(req).await
     }
 }
@@ -82,7 +82,7 @@ where
 {
     type Rejection = O::Rejection;
 
-    async fn call(&self, req: &Request, next: &impl Next) -> Result<Response, Self::Rejection> {
+    async fn call(&self, req: Request, next: &impl Next) -> Result<Response, Self::Rejection> {
         self.outer
             .call(
                 req,
@@ -96,58 +96,45 @@ where
 }
 
 #[crate::async_trait_internal]
-impl<'r, I, O> Next for And<I, &'r O>
+impl<I, O> Next for And<&I, &O>
 where
     O: Wrap,
     I: Next,
 {
-    async fn call(&self, req: &Request) -> Result<Response, Rejection> {
+    async fn call(&self, req: Request) -> Result<Response, Rejection> {
         self.outer
-            .call(req, &self.inner)
+            .call(req, self.inner)
             .await
             .map_err(|e| e.into_response_error())
             .and_then(|r| r.respond().map_err(|e| e.into_response_error()))
     }
 }
 
-pub(crate) struct DynNext<'bison>(pub &'bison Erased);
-
-impl<'bison> DynNext<'bison> {
-    pub fn new(handler: &'bison Erased) -> Self {
-        Self(handler)
-    }
-}
-
 #[crate::async_trait_internal]
-impl<'bison> Next for DynNext<'bison> {
-    async fn call(&self, req: &Request) -> Result<Response, Rejection> {
-        self.0.call(req).await
-    }
-}
-
 impl<W: Wrap> Wrap for Rc<W> {
     type Rejection = W::Rejection;
 
-    fn call<'a, 'b, 'c, 'o>(
+    fn call<'a, 'b, 'o>(
         &'a self,
-        req: &'b Request,
-        next: &'c impl Next,
+        req: Request,
+        next: &'b impl Next,
     ) -> BoxFuture<'o, Result<Response, Self::Rejection>>
     where
         'a: 'o,
         'b: 'o,
-        'c: 'o,
     {
         W::call(self, req, next)
     }
 }
 
-impl<I: Next> Next for &I {
-    fn call<'a, 'b, 'o>(&'a self, req: &'b Request) -> BoxFuture<'o, Result<Response, Rejection>>
+impl<H> Next for H
+where
+    H: Handler<Request, Response = Response, Rejection = Rejection>,
+{
+    fn call<'a, 'o>(&'a self, req: Request) -> BoxFuture<'o, Result<Response, Rejection>>
     where
         'a: 'o,
-        'b: 'o,
     {
-        I::call(self, req)
+        Handler::call(self, req)
     }
 }

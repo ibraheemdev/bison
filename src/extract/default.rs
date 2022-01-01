@@ -10,12 +10,9 @@ use std::fmt;
 /// This is the extractor used when no `#[cx(..)]` is given. It tries to extract
 /// the type using the [`path`](path()) extractor, and then the [`query`](query()) extractor,
 /// returning [`DefaultError`] if both fail.
-pub async fn default<'req, T>(
-    req: &'req Request,
-    field_name: FieldName,
-) -> Result<T, DefaultRejection>
+pub async fn default<T>(req: &Request, field_name: FieldName) -> Result<T, DefaultRejection>
 where
-    T: FromPath<'req> + FromQuery<'req>,
+    T: FromPath + FromQuery,
 {
     if let Ok(val) = path(req, ParamName(field_name.as_str())).await {
         return Ok(val);

@@ -2,70 +2,38 @@
 //! with HRTBs :(
 
 use crate::bounded::{Send, Sync};
-use crate::handler::{Handler, WithContext};
-use crate::Respond;
+use crate::handler::Handler;
+use crate::{Context, Rejection, Respond, Response};
 
-use std::convert::Infallible;
 use std::future::Future;
-use std::pin::Pin;
-use std::task::{self, Poll};
 
-impl<'a, F, O, R> Handler<'a, ()> for F
+#[crate::async_trait_internal]
+impl<F, O, R> Handler<()> for F
 where
-    F: Fn() -> O + Send + Sync,
-    O: Future<Output = R> + Send + 'a,
+    F: Fn() -> O + Send + Sync + 'static,
+    O: Future<Output = R> + Send,
     R: Respond,
 {
-    type Response = R;
-    type Future = InfallibleFut<O>;
-    type Rejection = Infallible;
+    type Response = Response;
+    type Rejection = Rejection;
 
-    fn call(&'a self, _: ()) -> Self::Future {
-        InfallibleFut { future: self() }
+    async fn call(&self, _: ()) -> Result<Response, Rejection> {
+        self().await.respond().map_err(Rejection::new)
     }
 }
 
-impl<'a, F, C, O, R> Handler<'a, (C,)> for F
+#[crate::async_trait_internal]
+impl<F, C, O, R> Handler<(C,)> for F
 where
-    F: FnArgs<C>,
-    F: Fn(<C as WithContext<'a>>::Context) -> O + Send + Sync,
-    O: Future<Output = R> + Send + 'a,
+    F: Fn(C) -> O + Send + Sync + 'static,
+    O: Future<Output = R> + Send,
+    C: Context,
     R: Respond,
-    C: WithContext<'a>,
 {
-    type Response = R;
-    type Future = InfallibleFut<O>;
-    type Rejection = Infallible;
+    type Response = Response;
+    type Rejection = Rejection;
 
-    fn call(&self, req: C::Context) -> Self::Future {
-        InfallibleFut { future: self(req) }
-    }
-}
-
-pub trait FnArgs<A> {
-    fn call(&self, args: A);
-}
-
-impl<F, O, A> FnArgs<A> for F
-where
-    F: Fn(A) -> O,
-{
-    fn call(&self, args: A) {
-        self(args);
-    }
-}
-
-pin_project_lite::pin_project! {
-    pub struct InfallibleFut<F> {
-        #[pin]
-        future: F,
-    }
-}
-
-impl<F: Future> Future for InfallibleFut<F> {
-    type Output = Result<F::Output, Infallible>;
-
-    fn poll(self: Pin<&mut Self>, cx: &mut task::Context<'_>) -> Poll<Self::Output> {
-        self.project().future.poll(cx).map(Ok)
+    async fn call(&self, (cx,): (C,)) -> Result<Response, Rejection> {
+        self(cx).await.respond().map_err(Rejection::new)
     }
 }

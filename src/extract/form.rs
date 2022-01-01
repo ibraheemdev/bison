@@ -26,10 +26,10 @@ where
 }
 
 fn is_url_encoded(req: &Request) -> bool {
-    req.headers()
-        .get(header::CONTENT_TYPE)
-        .and_then(|x| x.to_str().ok())
-        == Some("application/x-www-form-urlencoded")
+    match req.headers().get(header::CONTENT_TYPE) {
+        Some(x) => x.to_str().ok() == Some("application/x-www-form-urlencoded"),
+        None => false,
+    }
 }
 
 /// Configuration for the [`form`] extractor.

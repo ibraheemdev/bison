@@ -1,5 +1,5 @@
 use crate::bounded::Rc;
-use crate::handler::{self, Erased, Handler, WithContext};
+use crate::handler::{self, Context, Erased, Handler};
 use crate::http::Method;
 use crate::wrap::{Call, Wrap};
 use crate::Bison;
@@ -44,7 +44,7 @@ where
                     .route(
                         method,
                         format!("{}{}", self.prefix, path),
-                        Box::new(handler::BoxReturn::new(handler.wrap(wrap.clone()))),
+                        Box::new(handler.wrap(wrap.clone())),
                     )
                     .expect("failed to insert route"),
                 state: bison.state,
@@ -66,19 +66,16 @@ where
     }
 }
 
-macro_rules! insert_route {
-    ($name:ident => Method::$method:ident) => {
+macro_rules! route {
+    ($name:ident => $method:ident) => {
         #[doc = concat!("Insert a route for the `", stringify!($method), "` method.")]
         pub fn $name<H, C>(mut self, path: &str, handler: H) -> Scope<impl Wrap>
         where
-            H: for<'r> Handler<'r, C> + 'static,
-            C: for<'r> WithContext<'r> + 'static,
+            H: Handler<C>,
+            C: Context,
         {
-            self.routes.push((
-                Method::$method,
-                path.into(),
-                Box::new(handler::BoxReturn::new(handler::Extract::new(handler))),
-            ));
+            self.routes
+                .push((Method::$method, path.into(), handler::erase(handler)));
             self
         }
     };
@@ -88,10 +85,10 @@ impl<W> Scope<W>
 where
     W: Wrap,
 {
-    insert_route!(get => Method::GET);
-    insert_route!(put => Method::PUT);
-    insert_route!(post => Method::POST);
-    insert_route!(delete => Method::DELETE);
-    insert_route!(head => Method::HEAD);
-    insert_route!(options => Method::OPTIONS);
+    route!(put => Put);
+    route!(post => Post);
+    route!(head => Head);
+    route!(patch => Patch);
+    route!(delete => Delete);
+    route!(options => Options);
 }

@@ -32,31 +32,16 @@ use once_cell::sync::OnceCell;
 ///     # Default::default()
 /// }
 /// ```
-pub async fn query<'req, T>(req: &'req Request, name: ParamName) -> Result<T, QueryRejection>
+pub async fn query<T>(req: &Request, name: ParamName) -> Result<T, QueryRejection>
 where
-    T: FromQuery<'req>,
+    T: FromQuery,
 {
-    let name = name.0;
-    let error = QueryRejection::builder(name, std::any::type_name::<T>());
+    let error = QueryRejection::builder(name.0, std::any::type_name::<T>());
 
-    let query = req
-        .uri()
-        .query()
+    let raw = req
+        .query(name.0)
         .ok_or(error.kind(QueryRejectionKind::NotFound))?;
 
-    let map = req
-        .extensions()
-        .get::<CachedQuery>()
-        .unwrap()
-        .0
-        .get_or_try_init(|| {
-            serde_urlencoded::from_str::<HashMap<String, String>>(query)
-                .map_err(|err| error.kind(QueryRejectionKind::Deser(err)))
-        })?;
-
-    let raw = map
-        .get(name)
-        .ok_or(error.kind(QueryRejectionKind::NotFound))?;
     T::from_query(raw).map_err(|err| error.kind(QueryRejectionKind::FromQuery(err.into())))
 }
 
@@ -67,36 +52,28 @@ pub(crate) struct CachedQuery(OnceCell<HashMap<String, String>>);
 ///
 /// Types implementing this trait can be used with the [`query`]
 /// extractor.
-pub trait FromQuery<'req>: Sized {
+pub trait FromQuery: Sized {
     /// Errors that can occur in [`from_query`](FromQuery::from_query).
     type Error: Into<BoxError>;
 
     /// Extract the type from a query segment.
-    fn from_query(param: &'req str) -> Result<Self, Self::Error>;
+    fn from_query(param: &str) -> Result<Self, Self::Error>;
 }
 
-impl<'req> FromQuery<'req> for &'req str {
+impl FromQuery for String {
     type Error = Infallible;
 
-    fn from_query(query: &'req str) -> Result<Self, Self::Error> {
-        Ok(query)
-    }
-}
-
-impl<'req> FromQuery<'req> for String {
-    type Error = Infallible;
-
-    fn from_query(query: &'req str) -> Result<Self, Self::Error> {
+    fn from_query(query: &str) -> Result<Self, Self::Error> {
         Ok(query.to_owned())
     }
 }
 
 macro_rules! from_path {
     ($($ty:ty),*) => ($(
-        impl<'req> FromQuery<'req> for $ty {
+        impl FromQuery for $ty {
             type Error = <$ty as FromStr>::Err;
 
-            fn from_query(query: &'req str) -> Result<Self, Self::Error> {
+            fn from_query(query: &str) -> Result<Self, Self::Error> {
                 <$ty as FromStr>::from_str(query)
             }
         }
@@ -141,7 +118,6 @@ impl QueryRejection {
 #[derive(Debug)]
 enum QueryRejectionKind {
     NotFound,
-    Deser(serde_urlencoded::de::Error),
     FromQuery(BoxError),
 }
 
@@ -149,9 +125,6 @@ impl fmt::Display for QueryRejection {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.kind {
             QueryRejectionKind::NotFound => write!(f, "query parameter '{}' not found", self.name),
-            QueryRejectionKind::Deser(err) => {
-                write!(f, "failed to deserialize query parameters: {}", err)
-            }
             QueryRejectionKind::FromQuery(error) => write!(
                 f,
                 "failed to deserialize `{}` from query parameter: {}",
@@ -164,9 +137,7 @@ impl fmt::Display for QueryRejection {
 impl Reject for QueryRejection {
     fn reject(self, _: &Request) -> Response {
         let status = match self.kind {
-            QueryRejectionKind::FromQuery(_) | QueryRejectionKind::Deser(_) => {
-                StatusCode::BAD_REQUEST
-            }
+            QueryRejectionKind::FromQuery(_) => StatusCode::BAD_REQUEST,
             QueryRejectionKind::NotFound => StatusCode::NOT_FOUND,
         };
 

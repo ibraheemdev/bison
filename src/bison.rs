@@ -1,7 +1,5 @@
-use crate::extract;
-use crate::handler::{self, Handler, WithContext};
-use crate::http::ext::Cache;
-use crate::http::{Method, Request, Response};
+use crate::handler::{self, Context, Handler};
+use crate::http::{Body, Method, Response};
 use crate::router::{Router, Scope};
 use crate::state::{self, State};
 use crate::wrap::{Call, Wrap};
@@ -26,7 +24,7 @@ use crate::wrap::{Call, Wrap};
 /// ```
 pub struct Bison<W> {
     pub(crate) router: Router<W>,
-    pub(crate) state: state::Map,
+    pub(crate) state: state::AppState,
 }
 
 impl Bison<Call> {
@@ -40,7 +38,7 @@ impl Bison<Call> {
     pub fn new() -> Bison<impl Wrap> {
         Self {
             router: Router::new(),
-            state: state::Map::new(),
+            state: state::AppState::new(),
         }
     }
 }
@@ -64,17 +62,13 @@ where
     /// ```
     pub fn route<H, C>(self, path: &str, method: Method, handler: H) -> Self
     where
-        H: for<'r> Handler<'r, C> + 'static,
-        C: for<'r> WithContext<'r> + 'static,
+        H: Handler<C>,
+        C: Context,
     {
         Bison {
             router: self
                 .router
-                .route(
-                    method,
-                    path,
-                    Box::new(handler::BoxReturn::new(handler::Extract::new(handler))),
-                )
+                .route(method, path, handler::erase(handler))
                 .expect("failed to insert route"),
             state: self.state,
         }
@@ -95,18 +89,18 @@ where
     /// ```
     pub fn get<H, C>(self, path: &str, handler: H) -> Bison<impl Wrap>
     where
-        H: for<'r> Handler<'r, C> + 'static,
-        C: for<'r> WithContext<'r> + 'static,
+        H: Handler<C>,
+        C: Context,
     {
-        self.route(path, Method::GET, handler)
+        self.route(path, Method::Get, handler)
     }
 
-    route!(put => PUT);
-    route!(post => POST);
-    route!(head => HEAD);
-    route!(patch => PATCH);
-    route!(delete => DELETE);
-    route!(options => OPTIONS);
+    route!(put => Put);
+    route!(post => Post);
+    route!(head => Head);
+    route!(patch => Patch);
+    route!(delete => Delete);
+    route!(options => Options);
 
     /// Inject global application state.
     ///
@@ -175,12 +169,8 @@ where
     /// Most users will not interact with this method directly,
     /// and instead use a server crate such as [`bison_hyper`]
     /// or [`bison_actix`].
-    pub async fn serve(&self, mut req: Request) -> Response {
-        extract::setup(&mut req);
-        req.extensions_mut().insert(Cache::default());
-        req.extensions_mut().insert(self.state.clone());
-
-        self.router.serve(req).await
+    pub async fn serve_one(&self, req: http::Request<Body>) -> Response {
+        self.router.serve(req, self.state.clone()).await
     }
 }
 
@@ -190,8 +180,8 @@ macro_rules! route {
         /// See [`get`](Self::get) for examples.
         pub fn $name<H, C>(self, path: &str, handler: H) -> Bison<impl Wrap>
         where
-            H: for<'r> Handler<'r, C> + 'static,
-            C: for<'r> WithContext<'r> + 'static,
+            H: Handler<C>,
+            C: Context,
         {
             self.route(path, Method::$method, handler)
         }

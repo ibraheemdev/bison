@@ -1,6 +1,6 @@
 use crate::bounded::BoxError;
 use crate::extract::arg::ParamName;
-use crate::http::{Body, Request, RequestExt, Response, ResponseBuilder, StatusCode};
+use crate::http::{Body, Request, Response, ResponseBuilder, StatusCode};
 use crate::Reject;
 
 use std::convert::Infallible;
@@ -28,9 +28,9 @@ use std::str::FromStr;
 ///
 /// let bison = Bison::new().get("/user/:id", get_user);
 /// ```
-pub async fn path<'req, T>(req: &'req Request, name: ParamName) -> Result<T, PathRejection>
+pub async fn path<T>(req: &Request, name: ParamName) -> Result<T, PathRejection>
 where
-    T: FromPath<'req>,
+    T: FromPath,
 {
     let name = name.0;
 
@@ -49,36 +49,28 @@ where
 ///
 /// Types implementing this trait can be used with the [`path`]
 /// extractor.
-pub trait FromPath<'req>: Sized {
+pub trait FromPath: Sized {
     /// Errors that can occur in [`from_path`](FromPath::from_path).
     type Error: Into<BoxError>;
 
     /// Extract the type from a path segment.
-    fn from_path(path: &'req str) -> Result<Self, Self::Error>;
+    fn from_path(path: &str) -> Result<Self, Self::Error>;
 }
 
-impl<'req> FromPath<'req> for &'req str {
+impl FromPath for String {
     type Error = Infallible;
 
-    fn from_path(param: &'req str) -> Result<Self, Self::Error> {
-        Ok(param)
-    }
-}
-
-impl<'req> FromPath<'req> for String {
-    type Error = Infallible;
-
-    fn from_path(param: &'req str) -> Result<Self, Self::Error> {
+    fn from_path(param: &str) -> Result<Self, Self::Error> {
         Ok(param.to_owned())
     }
 }
 
 macro_rules! from_path {
     ($($ty:ty),*) => ($(
-        impl<'req> FromPath<'req> for $ty {
+        impl FromPath for $ty {
             type Error = <$ty as FromStr>::Err;
 
-            fn from_path(path: &'req str) -> Result<Self, Self::Error> {
+            fn from_path(path: &str) -> Result<Self, Self::Error> {
                 <$ty as FromStr>::from_str(path)
             }
         }

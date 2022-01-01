@@ -1,5 +1,5 @@
 use crate::http::{Body, Request, Response, ResponseBuilder, StatusCode};
-use crate::state::{self, State};
+use crate::state::State;
 use crate::Reject;
 
 use std::fmt;
@@ -7,17 +7,15 @@ use std::fmt;
 /// Extracts application state from a request.
 ///
 /// Application state can be injected with [`Bison::inject`](crate::Bison::inject).
-pub async fn state<'req, T>(req: &'req Request, _: ()) -> Result<&'req T, StateRejection>
+pub async fn state<T>(req: &Request, _: ()) -> Result<T, StateRejection>
 where
     T: State,
 {
-    req.extensions()
-        .get::<state::Map>()
-        .unwrap()
-        .get::<T>()
+    req.state::<T>()
         .ok_or(StateRejection {
             ty: std::any::type_name::<T>(),
         })
+        .map(T::clone)
 }
 
 /// The error returned by [`extract::state`](state()) if extraction fails.

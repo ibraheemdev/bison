@@ -3,6 +3,7 @@ use bytes::{Bytes, BytesMut};
 use crate::bounded::BoxError;
 use crate::extract::arg::DefaultArgument;
 use crate::http::{header, Body, Request, Response, ResponseBuilder, StatusCode};
+use crate::util::_try;
 use crate::Reject;
 
 use std::convert::Infallible;
@@ -21,12 +22,14 @@ where
         .take()
         .ok_or(BodyRejection(BodyErrorKind::Taken))?;
 
-    if req
-        .headers()
-        .get(header::CONTENT_TYPE)
-        .and_then(|x| x.to_str().ok())
-        .and_then(|x| x.parse::<usize>().ok())
-        > Some(config.limit)
+    if _try! {
+        req.headers()
+            .get(header::CONTENT_TYPE)?
+            .to_str()
+            .ok()?
+            .parse::<usize>()
+            .ok()
+    } > Some(config.limit)
     {
         return Err(BodyRejection(BodyErrorKind::Overflow));
     }

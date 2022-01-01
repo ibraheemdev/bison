@@ -39,8 +39,6 @@ fn expand(input: DeriveInput) -> Result<TokenStream> {
         }
     };
 
-    let mut ty_lifetime = None;
-
     for param in &input.generics.params {
         match param {
             GenericParam::Type(_) => {
@@ -49,15 +47,11 @@ fn expand(input: DeriveInput) -> Result<TokenStream> {
                     "generics type parameters are not supported",
                 ))
             }
-            GenericParam::Lifetime(LifetimeDef { lifetime, .. }) => {
-                if ty_lifetime.is_some() {
-                    return Err(Error::new_spanned(
-                        &input.generics.params,
-                        "only one lifetime parameter is supported",
-                    ));
-                }
-
-                ty_lifetime = Some(lifetime.clone());
+            GenericParam::Lifetime(_) => {
+                return Err(Error::new_spanned(
+                    &input.generics.params,
+                    "lifetime parameters are not supported",
+                ));
             }
             GenericParam::Const(_) => {
                 return Err(Error::new_spanned(
@@ -80,43 +74,17 @@ fn expand(input: DeriveInput) -> Result<TokenStream> {
         })
         .collect::<Result<Vec<_>>>()?;
 
-    let ty = match ty_lifetime {
-        Some(ref l) => quote! { #name<#l> },
-        None => quote! { #name },
-    };
-
     let (_, _, where_clause) = input.generics.split_for_impl();
 
-    let context = quote! {
+    Ok(quote! {
         #[automatically_derived]
-        impl<'req> ::bison::Context<'req> for #ty #where_clause {
-            type Future = ::bison::bounded::BoxFuture<'req, Result<Self, ::bison::Rejection>>;
+        impl ::bison::Context for #name #where_clause {
+            type Future = ::bison::bounded::BoxFuture<'static, Result<Self, ::bison::Rejection>>;
 
-            fn extract(req: &'req mut ::bison::Request) ->  Self::Future {
+            fn extract(req: ::bison::Request) -> Self::Future {
                 Box::pin(async move { Ok(#name { #(#fields)* }) })
             }
         }
-    };
-
-    let with_context = match ty_lifetime {
-        Some(_) => quote! {
-            #[automatically_derived]
-            impl<'req, 'any> ::bison::handler::WithContext<'req> for #name<'any> #where_clause {
-                type Context = #name<'req>;
-            }
-        },
-
-        None => quote! {
-            #[automatically_derived]
-            impl<'req> ::bison::handler::WithContext<'req> for #name #where_clause {
-                type Context = #name;
-            }
-        },
-    };
-
-    Ok(quote! {
-        #context
-        #with_context
     })
 }
 
@@ -142,7 +110,7 @@ fn extract(field: &Field) -> Result<TokenStream> {
 
         return Ok(quote_spanned! { ty.span() =>
             let result: ::std::result::Result<<#ty as ::bison::extract::Transform<_>>::Ok, ::bison::Rejection> =
-                #extractor(req, #arg)
+                #extractor(&req, #arg)
                     .await
                     .map_err(::bison::Rejection::from);
 
@@ -152,7 +120,7 @@ fn extract(field: &Field) -> Result<TokenStream> {
 
     return Ok(quote_spanned! { field.ty.span() =>
         let result: ::std::result::Result<<#ty as ::bison::extract::Transform<_>>::Ok, ::bison::Rejection> =
-            ::bison::extract::default(req, ::bison::extract::arg::DefaultArgument::new(#field_name))
+            ::bison::extract::default(&req, ::bison::extract::arg::DefaultArgument::new(#field_name))
                 .await
                 .map_err(::bison::Rejection::from);
 

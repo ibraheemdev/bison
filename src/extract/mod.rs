@@ -22,7 +22,3 @@ crate::util::cfg_json! {
     mod json;
     pub use json::{json, JsonRejection, JsonConfig};
 }
-
-pub(crate) fn setup(req: &mut crate::Request) {
-    req.extensions_mut().insert(query::CachedQuery::default());
-}

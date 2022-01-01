@@ -1,18 +1,16 @@
 //! Common HTTP types.
 
+mod rcstr;
+pub use rcstr::RcStr;
+
 mod body;
 pub use body::Body;
 
-pub(crate) mod ext;
-pub use ext::{RequestBuilderExt, RequestExt, ResponseExt};
+pub(crate) mod request;
+pub use request::{Method, Request};
 
 pub use bytes::Bytes;
-pub use http::{header, Extensions, HeaderValue, Method, StatusCode};
-
-/// An HTTP request.
-///
-/// See [`http::Request`](http::Request) for details.
-pub type Request = http::Request<Body>;
+pub use http::{header, Extensions, HeaderValue, StatusCode};
 
 /// An HTTP response.
 ///

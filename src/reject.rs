@@ -26,8 +26,10 @@ pub struct Rejection {
 
 impl Rejection {
     /// Create a new `AnyResponseError` from a given response error.
+    // TODO: remove
     pub fn new<E>(err: E) -> Self
     where
+        // TODO: remove
         E: IntoRejection,
     {
         err.into_response_error()

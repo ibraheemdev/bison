@@ -3,16 +3,18 @@ pub use scope::Scope;
 
 use crate::http::{self, header, Body, Method, Request, Response, ResponseBuilder, StatusCode};
 use crate::reject::IntoRejection;
-use crate::wrap::{Call, DynNext, Wrap};
+use crate::state::AppState;
+use crate::wrap::{Call, Wrap};
 use crate::{handler, Respond};
 
 use std::collections::HashMap;
 
+use ::http::Method as HttpMethod;
 use matchit::Node;
 
 pub struct Router<W> {
     wrap: W,
-    routes: HashMap<Method, Node<Box<handler::Erased>>>,
+    routes: HashMap<HttpMethod, Node<Box<handler::Erased>>>,
 }
 
 impl Router<Call> {
@@ -41,10 +43,10 @@ where
         path: impl Into<String>,
         handler: Box<handler::Erased>,
     ) -> Result<Self, matchit::InsertError> {
-        self.routes.entry(method).or_default().insert(
-            path,
-            Box::new(handler::BoxReturn::new(handler::Extract::new(handler))),
-        )?;
+        self.routes
+            .entry(method.into_http())
+            .or_default()
+            .insert(path, handler)?;
 
         Ok(self)
     }
@@ -56,7 +58,7 @@ where
                 for method in self
                     .routes
                     .keys()
-                    .filter(|&method| method != Method::OPTIONS)
+                    .filter(|&method| method != HttpMethod::OPTIONS)
                 {
                     allowed.push(method.as_ref());
                 }
@@ -65,7 +67,7 @@ where
             _ => self
                 .routes
                 .keys()
-                .filter(|&method| method != Method::OPTIONS)
+                .filter(|&method| method != HttpMethod::OPTIONS)
                 .filter(|&method| {
                     self.routes
                         .get(method)
@@ -77,13 +79,13 @@ where
         };
 
         if !allowed.is_empty() {
-            allowed.push(Method::OPTIONS.as_str())
+            allowed.push(HttpMethod::OPTIONS.as_str())
         }
 
         allowed
     }
 
-    pub(crate) async fn serve(&self, mut req: Request) -> Response {
+    pub(crate) async fn serve(&self, req: ::http::Request<Body>, state: AppState) -> Response {
         let path = req.uri().path();
         match self.routes.get(req.method()) {
             Some(node) => match node.at(path) {
@@ -94,11 +96,11 @@ where
                         .params
                         .iter()
                         .map(|(k, v)| (k.to_owned(), v.to_owned()))
-                        .collect::<http::ext::Params>();
+                        .collect::<http::request::Params>();
 
-                    req.extensions_mut().insert(params);
+                    let req = Request::new(req, state, params);
 
-                    match self.wrap.call(&req, &DynNext::new(&**handler)).await {
+                    match self.wrap.call(req.clone(), handler).await {
                         Ok(ok) => match ok.respond() {
                             Ok(ok) => ok,
                             Err(err) => err.into_response_error().reject(&req),
@@ -106,7 +108,7 @@ where
                         Err(err) => err.into_response_error().reject(&req),
                     }
                 }
-                Err(e) if e.tsr() && req.method() != Method::CONNECT && path != "/" => {
+                Err(e) if e.tsr() && req.method() != HttpMethod::CONNECT && path != "/" => {
                     let path = if path.len() > 1 && path.ends_with('/') {
                         path[..path.len() - 1].to_owned()
                     } else {

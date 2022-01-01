@@ -6,14 +6,14 @@ use std::sync::Arc;
 /// into the application with [`Bison::inject`](crate::Bison::inject).
 ///
 /// You should never have to implement [`State`] manually.
-pub trait State: Send + Sync + 'static {}
+pub trait State: Send + Sync + Clone + 'static {}
 
-impl<T> State for T where T: Send + Sync + 'static {}
+impl<T> State for T where T: Send + Sync + Clone + 'static {}
 
 #[derive(Clone)]
-pub struct Map(Arc<http::Extensions>);
+pub struct AppState(Arc<http::Extensions>);
 
-impl Map {
+impl AppState {
     pub fn new() -> Self {
         Self(Default::default())
     }

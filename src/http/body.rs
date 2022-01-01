@@ -1,5 +1,4 @@
-use crate::bounded::{BoxError, BoxStream, Send, Sync};
-use crate::util::AtomicRefCell;
+use crate::bounded::{BoxError, BoxStream, RefCell, Send, Sync};
 
 use std::error::Error as StdError;
 use std::pin::Pin;
@@ -12,7 +11,7 @@ pub use http::{header, Extensions, HeaderValue, Method, StatusCode};
 use futures_core::Stream;
 
 /// Respresents the body of an HTTP message.
-pub struct Body(AtomicRefCell<BodyKind>);
+pub struct Body(RefCell<BodyKind>);
 
 enum BodyKind {
     Stream(BoxStream<'static, Result<Bytes, BoxError>>),
@@ -44,9 +43,7 @@ impl Body {
             }
         }
 
-        Body(AtomicRefCell::new(BodyKind::Stream(Box::pin(MapErr(
-            stream,
-        )))))
+        Body(RefCell::new(BodyKind::Stream(Box::pin(MapErr(stream)))))
     }
 
     pub fn try_clone(&self) -> Option<Body> {
@@ -57,23 +54,23 @@ impl Body {
             BodyKind::Taken => BodyKind::Taken,
         };
 
-        Some(Body(AtomicRefCell::new(kind)))
+        Some(Body(RefCell::new(kind)))
     }
 
     /// Create a body directly from bytes.
     pub fn once(bytes: impl Into<Bytes>) -> Self {
-        Body(AtomicRefCell::new(BodyKind::Once(bytes.into())))
+        Body(RefCell::new(BodyKind::Once(bytes.into())))
     }
 
     /// Create an empty `Body`.
     pub fn empty() -> Self {
-        Body(AtomicRefCell::new(BodyKind::Empty))
+        Body(RefCell::new(BodyKind::Empty))
     }
 
     pub fn take(&self) -> Option<Body> {
         match mem::replace(&mut *self.0.borrow_mut(), BodyKind::Taken) {
             BodyKind::Taken => None,
-            b => Some(Body(AtomicRefCell::new(b))),
+            b => Some(Body(RefCell::new(b))),
         }
     }
 

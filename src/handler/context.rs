@@ -3,6 +3,8 @@ use crate::http::Request;
 use crate::Rejection;
 
 use std::future::{ready, Future, Ready};
+use std::pin::Pin;
+use std::task::{self, Poll};
 
 /// Context about an HTTP request.
 ///
@@ -19,45 +21,49 @@ use std::future::{ready, Future, Ready};
 ///     format!("Hello {}!", cx.name)
 /// }
 /// ```
-pub trait Context<'req>: Send + Sync + Sized {
-    type Future: Future<Output = Result<Self, Rejection>> + Send + 'req;
+pub trait Context: Send + Sync + Sized + 'static {
+    type Future: Future<Output = Result<Self, Rejection>> + Send;
 
-    fn extract(req: &'req Request) -> Self::Future;
+    fn extract(req: Request) -> Self::Future;
 }
 
-/// A type with context about an HTTP request.
-///
-/// This trait is used to create the correct bounds
-/// for handler functions. You shouldn't have to
-/// worry about it, but it may show up in error messages.
-pub trait WithContext<'req>: Send + Sync {
-    type Context: Context<'req> + 'req;
-}
-
-impl<'req> Context<'req> for &'req Request {
+impl Context for Request {
     type Future = Ready<Result<Self, Rejection>>;
 
-    fn extract(req: &'req Request) -> Self::Future {
+    fn extract(req: Request) -> Self::Future {
         ready(Ok(req))
     }
 }
 
-impl<'any, 'req> WithContext<'req> for &'any Request {
-    type Context = &'req Request;
-}
-
-impl<'req> Context<'req> for () {
+impl Context for () {
     type Future = Ready<Result<Self, Rejection>>;
 
-    fn extract(_: &'req Request) -> Self::Future {
+    fn extract(_: Request) -> Self::Future {
         ready(Ok(()))
     }
 }
 
-impl<'req> WithContext<'req> for () {
-    type Context = ();
+impl<T: Context> Context for (T,) {
+    type Future = TupleFut<T::Future>;
+
+    fn extract(req: Request) -> Self::Future {
+        TupleFut {
+            fut: T::extract(req),
+        }
+    }
 }
 
-impl<'req, T: WithContext<'req>> WithContext<'req> for (T,) {
-    type Context = T::Context;
+pin_project_lite::pin_project! {
+    pub struct TupleFut<F> { #[pin] fut: F }
+}
+
+impl<F, T, E> Future for TupleFut<F>
+where
+    F: Future<Output = Result<T, E>>,
+{
+    type Output = Result<(T,), E>;
+
+    fn poll(self: Pin<&mut Self>, cx: &mut task::Context<'_>) -> Poll<Self::Output> {
+        self.project().fut.poll(cx).map_ok(|val| (val,))
+    }
 }
