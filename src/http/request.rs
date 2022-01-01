@@ -112,15 +112,17 @@ impl Request {
     }
 }
 
-const INVALID_METHOD: &str = "invalid HTTP method";
-
 impl Request {
-    pub(crate) fn new(req: http::Request<Body>, state: AppState, route_params: Params) -> Self {
+    pub(crate) fn new(
+        req: http::Request<Body>,
+        state: AppState,
+        route_params: Params,
+    ) -> Option<Self> {
         let (req, body) = req.into_parts();
 
-        Request {
+        Some(Request {
             shared: Rc::new(Shared {
-                method: Cell::new(Method::from_http(req.method)),
+                method: Cell::new(Method::from_http(req.method)?),
                 uri: UriCell::new(Uri(req.uri)),
                 query_params: OnceCell::new(),
                 headers: Headers(RefCell::new(req.headers)),
@@ -129,7 +131,7 @@ impl Request {
                 body,
                 state,
             }),
-        }
+        })
     }
 }
 
@@ -258,34 +260,36 @@ impl Hasher for Identity {
 }
 
 impl Method {
-    fn from_http(method: http::Method) -> Self {
-        match method.as_str().len() {
+    fn from_http(method: http::Method) -> Option<Self> {
+        let method = match method.as_str().len() {
             3 => match method {
                 http::Method::GET => Method::Get,
                 http::Method::PUT => Method::Put,
-                _ => panic!("{}", INVALID_METHOD),
+                _ => return None,
             },
             4 => match method {
                 http::Method::POST => Method::Post,
                 http::Method::HEAD => Method::Head,
-                _ => panic!("{}", INVALID_METHOD),
+                _ => return None,
             },
             5 => match method {
                 http::Method::PATCH => Method::Patch,
                 http::Method::TRACE => Method::Trace,
-                _ => panic!("{}", INVALID_METHOD),
+                _ => return None,
             },
             6 => match method {
                 http::Method::DELETE => Method::Delete,
-                _ => panic!("{}", INVALID_METHOD),
+                _ => return None,
             },
             7 => match method {
                 http::Method::OPTIONS => Method::Options,
                 http::Method::CONNECT => Method::Connect,
-                _ => panic!("{}", INVALID_METHOD),
+                _ => return None,
             },
-            _ => panic!("{}", INVALID_METHOD),
-        }
+            _ => return None,
+        };
+
+        Some(method)
     }
 
     pub(crate) fn into_http(self) -> http::Method {
@@ -350,19 +354,19 @@ impl UriCell {
 
 impl Drop for UriCell {
     fn drop(&mut self) {
-        let mut node = *self.root.get_mut();
-        while !node.is_null() {
+        let mut ptr = *self.root.get_mut();
+        while !ptr.is_null() {
             // SAFETY: &mut self guarantees we have unique
             // access to the nodes, which were create from
             // Box::into_raw
-            let mut uri = unsafe { Box::from_raw(node) };
-            node = *uri.next.get_mut();
+            let mut node = unsafe { Box::from_raw(ptr) };
+            ptr = *node.next.get_mut();
         }
     }
 }
 
 #[test]
-fn uricell() {
+fn uri_cell() {
     let uri = UriCell::new("https://www.rust-lang.org/install.html".parse().unwrap());
     assert_eq!(
         uri.get().to_string(),

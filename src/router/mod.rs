@@ -98,7 +98,15 @@ where
                         .map(|(k, v)| (k.to_owned(), v.to_owned()))
                         .collect::<http::request::Params>();
 
-                    let req = Request::new(req, state, params);
+                    let req = match Request::new(req, state, params) {
+                        Some(req) => req,
+                        None => {
+                            return ResponseBuilder::new()
+                                .status(StatusCode::METHOD_NOT_ALLOWED)
+                                .body(Body::empty())
+                                .unwrap()
+                        }
+                    };
 
                     match self.wrap.call(req.clone(), handler).await {
                         Ok(ok) => match ok.respond() {
