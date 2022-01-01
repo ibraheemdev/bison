@@ -6,13 +6,13 @@ use crate::{Rejection, Wrap};
 use std::marker::PhantomData;
 
 /// A handler wrapped with some middleware.
-pub struct Wrapped<H, C, W> {
+pub struct Wrapped<H, C, W, WC> {
     wrap: W,
     handler: Extract<H, C>,
-    _cx: PhantomData<C>,
+    _cx: PhantomData<(C, WC)>,
 }
 
-impl<H, C, W> Wrapped<H, C, W> {
+impl<H, C, W, WC> Wrapped<H, C, W, WC> {
     pub(crate) fn new(handler: H, wrap: W) -> Self {
         Wrapped {
             wrap,
@@ -23,18 +23,21 @@ impl<H, C, W> Wrapped<H, C, W> {
 }
 
 #[crate::async_trait_internal]
-impl<H, C, W> Handler<Request> for Wrapped<H, C, W>
+impl<H, C, W, WC> Handler<Request> for Wrapped<H, C, W, WC>
 where
-    W: Wrap,
+    W: Wrap<WC>,
     H: Handler<C>,
     C: Context,
+    WC: Context,
 {
     type Response = Response;
     type Rejection = Rejection;
 
     async fn call(&self, req: Request) -> Result<Response, Rejection> {
+        let cx = WC::extract(req).await?;
+
         self.wrap
-            .call(req, &self.handler)
+            .call(cx, &self.handler)
             .await
             .map_err(|e| e.into_response_error())
     }

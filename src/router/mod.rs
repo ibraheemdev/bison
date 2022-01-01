@@ -5,7 +5,7 @@ use crate::http::{self, header, Body, Method, Request, Response, ResponseBuilder
 use crate::reject::IntoRejection;
 use crate::state::AppState;
 use crate::wrap::{Call, Wrap};
-use crate::{handler, Respond};
+use crate::{handler, Context, Respond};
 
 use std::collections::HashMap;
 
@@ -28,11 +28,15 @@ impl Router<Call> {
 
 impl<W> Router<W>
 where
-    W: Wrap,
+    W: Wrap<Request>,
 {
-    pub(crate) fn wrap(self, wrap: impl Wrap) -> Router<impl Wrap> {
+    pub(crate) fn wrap<O, C>(self, wrap: O) -> Router<impl Wrap>
+    where
+        O: Wrap<C>,
+        C: Context,
+    {
         Router {
-            wrap: self.wrap.and(wrap),
+            wrap: self.wrap.wrap(wrap),
             routes: self.routes,
         }
     }

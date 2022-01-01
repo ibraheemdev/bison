@@ -15,7 +15,7 @@ util::doc_inline! {
     pub use self::http::{Request, Response};
     pub use self::wrap::Wrap;
     pub use self::bison::Bison;
-    pub use self::handler::{Context};
+    pub use self::handler::{Context, Handler};
     pub use self::reject::{Rejection, Reject};
     pub use self::respond::Respond;
     pub use self::router::Scope;

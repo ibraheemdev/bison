@@ -22,3 +22,7 @@ crate::util::cfg_json! {
     mod json;
     pub use json::{json, JsonRejection, JsonConfig};
 }
+
+pub async fn nest<T: crate::Context>(req: &crate::Request, _: ()) -> Result<T, crate::Rejection> {
+    <T as crate::Context>::extract(req.clone()).await
+}

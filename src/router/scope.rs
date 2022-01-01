@@ -2,7 +2,7 @@ use crate::bounded::Rc;
 use crate::handler::{self, Context, Erased, Handler};
 use crate::http::Method;
 use crate::wrap::{Call, Wrap};
-use crate::Bison;
+use crate::{Bison, Request};
 
 /// Routes scoped under a common prefix.
 ///
@@ -30,11 +30,11 @@ impl Scope<Call> {
 
 impl<W> Scope<W>
 where
-    W: Wrap,
+    W: Wrap<Request>,
 {
     pub(crate) fn register<M>(self, mut bison: Bison<M>) -> Bison<impl Wrap>
     where
-        M: Wrap,
+        M: Wrap<Request>,
     {
         let wrap = Rc::new(self.wrap);
         for (method, path, handler) in self.routes {
@@ -54,12 +54,13 @@ where
     }
 
     /// Wrap the routes with some middleware.
-    pub fn wrap<O>(self, wrap: O) -> Scope<impl Wrap>
+    pub fn wrap<O, C>(self, wrap: O) -> Scope<impl Wrap>
     where
-        O: Wrap,
+        O: Wrap<C>,
+        C: Context,
     {
         Scope {
-            wrap: self.wrap.and(wrap),
+            wrap: self.wrap.wrap(wrap),
             prefix: self.prefix,
             routes: self.routes,
         }
@@ -74,8 +75,15 @@ macro_rules! route {
             H: Handler<C>,
             C: Context,
         {
+            // avoid registering "//foo"
+            let path = if self.prefix == "/" && !path.is_empty() {
+                path[1..].to_owned()
+            } else {
+                path.to_owned()
+            };
+
             self.routes
-                .push((Method::$method, path.into(), handler::erase(handler)));
+                .push((Method::$method, path, handler::erase(handler)));
             self
         }
     };
@@ -83,8 +91,9 @@ macro_rules! route {
 
 impl<W> Scope<W>
 where
-    W: Wrap,
+    W: Wrap<Request>,
 {
+    route!(get => Get);
     route!(put => Put);
     route!(post => Post);
     route!(head => Head);

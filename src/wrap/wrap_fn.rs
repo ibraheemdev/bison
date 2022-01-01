@@ -1,7 +1,8 @@
 use crate::bounded::{Send, Sync};
-use crate::http::{Request, Response};
+use crate::http::Response;
 use crate::reject::IntoRejection;
 use crate::wrap::{Next, Wrap};
+use crate::Context;
 
 use std::future::Future;
 use std::marker::PhantomData;
@@ -9,9 +10,12 @@ use std::marker::PhantomData;
 /// Create middleware from a closure.
 #[macro_export]
 macro_rules! wrap_fn {
-    (async |$req:ident, $next:ident| $body:expr) => {{
+    (async |$req:ident, $next:ident| $body:expr) => {
+        ::bison::wrap_fn!(async |$req: ::bison::Request, $next| $body)
+    };
+    (async |$req:ident: $cx:ty, $next:ident| $body:expr) => {{
         async fn wrap(
-            $req: ::bison::Request,
+            $req: $cx,
             $next: &dyn ::bison::wrap::Next,
         ) -> Result<::bison::Response, ::bison::Rejection> {
             let response = $body;
@@ -25,44 +29,48 @@ macro_rules! wrap_fn {
     }};
 }
 
-pub trait WrapFn<'a, E>: Send + Sync + 'static {
-    type F: Future<Output = Result<Response, E>> + Send + 'a;
+pub trait WrapFn<'a, C>: Send + Sync + 'static {
+    type Error: IntoRejection;
+    type Future: Future<Output = Result<Response, Self::Error>> + Send + 'a;
 
-    fn call(&self, req: Request, next: &'a dyn Next) -> Self::F;
+    fn call(&self, cx: C, next: &'a dyn Next) -> Self::Future;
 }
 
-impl<'a, O, E, F> WrapFn<'a, E> for F
+impl<'a, F, C, O, E> WrapFn<'a, C> for F
 where
-    F: Fn(Request, &'a dyn Next) -> O + Send + Sync + 'static,
+    F: Fn(C, &'a dyn Next) -> O + Send + Sync + 'static,
     O: Future<Output = Result<Response, E>> + Send + 'a,
     E: IntoRejection,
 {
-    type F = O;
+    type Error = E;
+    type Future = O;
 
-    fn call(&self, req: Request, next: &'a dyn Next) -> Self::F {
-        self(req, next)
+    fn call(&self, cx: C, next: &'a dyn Next) -> Self::Future {
+        self(cx, next)
     }
 }
 
-pub fn __internal_wrap_fn<F, E>(f: F) -> impl Wrap
+pub fn __internal_wrap_fn<F, E, C>(f: F) -> impl Wrap<C>
 where
-    for<'a> F: WrapFn<'a, E>,
+    for<'a> F: WrapFn<'a, C, Error = E>,
     E: IntoRejection + 'static,
+    C: Context,
 {
-    struct WrapFnImpl<F, E>(F, PhantomData<E>);
+    struct Impl<F, E, C>(F, PhantomData<(E, C)>);
 
     #[crate::async_trait_internal]
-    impl<F, E> Wrap for WrapFnImpl<F, E>
+    impl<F, E, C> Wrap<C> for Impl<F, E, C>
     where
-        F: for<'a> WrapFn<'a, E>,
+        for<'a> F: WrapFn<'a, C, Error = E>,
         E: IntoRejection + 'static,
+        C: Context,
     {
         type Rejection = E;
 
-        async fn call(&self, req: Request, next: &impl Next) -> Result<Response, Self::Rejection> {
-            self.0.call(req, next).await
+        async fn call(&self, cx: C, next: &impl Next) -> Result<Response, Self::Rejection> {
+            self.0.call(cx, next).await
         }
     }
 
-    WrapFnImpl(f, PhantomData::<E>)
+    Impl(f, PhantomData::<(E, C)>)
 }

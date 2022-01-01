@@ -3,6 +3,7 @@ use crate::http::{Body, Method, Response};
 use crate::router::{Router, Scope};
 use crate::state::{self, State};
 use crate::wrap::{Call, Wrap};
+use crate::Request;
 
 /// Where everything happens.
 ///
@@ -45,7 +46,7 @@ impl Bison<Call> {
 
 impl<W> Bison<W>
 where
-    W: Wrap,
+    W: Wrap<Request>,
 {
     /// Insert a route for the given method.
     ///
@@ -147,7 +148,11 @@ where
     }
 
     /// Wrap the application with some middleware.
-    pub fn wrap(self, wrap: impl Wrap) -> Bison<impl Wrap> {
+    pub fn wrap<O, C>(self, wrap: O) -> Bison<impl Wrap>
+    where
+        O: Wrap<C>,
+        C: Context,
+    {
         Bison {
             router: self.router.wrap(wrap),
             state: self.state,
@@ -158,7 +163,7 @@ where
     pub fn scope<F, O>(self, prefix: &str, f: F) -> Bison<impl Wrap>
     where
         F: FnOnce(Scope<Call>) -> Scope<O>,
-        O: Wrap,
+        O: Wrap<Request>,
     {
         let scope = f(Scope::new(prefix));
         scope.register(self)

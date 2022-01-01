@@ -31,9 +31,9 @@ pub trait Handler<C>: Send + Sync + 'static {
     async fn call(&self, cx: C) -> Result<Self::Response, Self::Rejection>;
 
     /// Wrap a handler with some middleware.
-    fn wrap<W>(self, wrap: W) -> Wrapped<Self, C, W>
+    fn wrap<W, WC>(self, wrap: W) -> Wrapped<Self, C, W, WC>
     where
-        W: Wrap,
+        W: Wrap<WC>,
         Self: Sized,
     {
         Wrapped::new(self, wrap)

@@ -2,6 +2,8 @@
 
 mod wrap_fn;
 
+use std::marker::PhantomData;
+
 #[doc(hidden)]
 pub use wrap_fn::__internal_wrap_fn;
 
@@ -9,30 +11,31 @@ use crate::bounded::{BoxFuture, Rc, Send, Sync};
 use crate::handler::Handler;
 use crate::http::{Request, Response};
 use crate::reject::IntoRejection;
-use crate::{Rejection, Respond};
+use crate::{Context, Rejection, Respond};
 
 /// Middleware that wraps around the rest of the chain.
 #[crate::async_trait_internal]
-pub trait Wrap: Send + Sync + 'static {
+pub trait Wrap<C = Request>: Send + Sync + 'static {
     /// An error that can occur when calling this middleware.
     type Rejection: IntoRejection;
 
     /// Call the middleware with a request, and the next
     /// handler in the chain.
-    async fn call(&self, req: Request, next: &impl Next) -> Result<Response, Self::Rejection>;
+    async fn call(&self, cx: C, next: &impl Next) -> Result<Response, Self::Rejection>;
 
     /// Add another middleware to the chain.
     ///
     /// The returned middleware will pass `self` to
     /// the given middleware as the next parameter.
-    fn and<W>(self, wrap: W) -> And<Self, W>
+    fn wrap<W, O>(self, wrap: W) -> And<Self, W, C, O>
     where
-        W: Wrap,
+        W: Wrap<O>,
         Self: Sized,
     {
         And {
             inner: self,
             outer: wrap,
+            _cx: PhantomData,
         }
     }
 }
@@ -58,7 +61,7 @@ impl Call {
 }
 
 #[crate::async_trait_internal]
-impl Wrap for Call {
+impl Wrap<Request> for Call {
     type Rejection = Rejection;
 
     async fn call(&self, req: Request, next: &impl Next) -> Result<Response, Self::Rejection> {
@@ -69,41 +72,51 @@ impl Wrap for Call {
 /// A combination of two middlewares.
 ///
 /// See [`Wrap::and`] for details.
-pub struct And<I, O> {
+pub struct And<I, O, IC, OC> {
     inner: I,
     outer: O,
+    _cx: PhantomData<(IC, OC)>,
 }
 
 #[crate::async_trait_internal]
-impl<I, O> Wrap for And<I, O>
+impl<I, O, IC, OC> Wrap<Request> for And<I, O, IC, OC>
 where
-    I: Wrap,
-    O: Wrap,
+    I: Wrap<IC>,
+    O: Wrap<OC>,
+    IC: Context,
+    OC: Context,
 {
-    type Rejection = O::Rejection;
+    type Rejection = Rejection;
 
     async fn call(&self, req: Request, next: &impl Next) -> Result<Response, Self::Rejection> {
+        let cx = OC::extract(req).await?;
         self.outer
             .call(
-                req,
+                cx,
                 &And {
                     inner: next,
                     outer: &self.inner,
+                    _cx: PhantomData::<(IC, OC)>,
                 },
             )
             .await
+            .map_err(Rejection::new)
     }
 }
 
 #[crate::async_trait_internal]
-impl<I, O> Next for And<&I, &O>
+impl<I, O, IC, OC> Next for And<&I, &O, IC, OC>
 where
-    O: Wrap,
     I: Next,
+    O: Wrap<IC>,
+    IC: Context,
+    OC: Context,
 {
     async fn call(&self, req: Request) -> Result<Response, Rejection> {
+        let cx = IC::extract(req).await?;
+
         self.outer
-            .call(req, self.inner)
+            .call(cx, self.inner)
             .await
             .map_err(|e| e.into_response_error())
             .and_then(|r| r.respond().map_err(|e| e.into_response_error()))
@@ -111,19 +124,22 @@ where
 }
 
 #[crate::async_trait_internal]
-impl<W: Wrap> Wrap for Rc<W> {
+impl<W, C> Wrap<C> for Rc<W>
+where
+    W: Wrap<C>,
+{
     type Rejection = W::Rejection;
 
     fn call<'a, 'b, 'o>(
         &'a self,
-        req: Request,
+        cx: C,
         next: &'b impl Next,
     ) -> BoxFuture<'o, Result<Response, Self::Rejection>>
     where
         'a: 'o,
         'b: 'o,
     {
-        W::call(self, req, next)
+        W::call(self, cx, next)
     }
 }
 
