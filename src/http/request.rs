@@ -6,6 +6,8 @@ use std::any::{Any, TypeId};
 use std::cell::UnsafeCell;
 use std::collections::HashMap;
 use std::hash::{BuildHasherDefault, Hasher};
+use std::str::FromStr;
+use std::sync::atomic::{AtomicPtr, Ordering};
 
 /// An HTTP method.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
@@ -29,7 +31,7 @@ pub struct Request {
 
 pub struct Shared {
     method: Cell<Method>,
-    uri: RefCell<Uri>,
+    uri: UriCell,
     state: AppState,
     headers: Headers,
     cache: Cache,
@@ -47,12 +49,12 @@ impl Request {
         self.shared.method.set(method);
     }
 
-    pub fn uri(&self) -> Uri {
-        self.shared.uri.borrow_mut().clone()
+    pub fn uri(&self) -> &Uri {
+        self.shared.uri.get()
     }
 
     pub fn set_uri(&self, uri: Uri) {
-        *self.shared.uri.borrow_mut() = uri;
+        self.shared.uri.set(uri);
     }
 
     pub fn headers(&self) -> &Headers {
@@ -64,7 +66,7 @@ impl Request {
     }
 
     pub fn query(&self, name: &str) -> Option<&str> {
-        if let Some(query) = self.shared.uri.borrow_mut().query() {
+        if let Some(query) = self.shared.uri.get().query() {
             return self
                 .shared
                 .query_params
@@ -119,7 +121,7 @@ impl Request {
         Request {
             shared: Rc::new(Shared {
                 method: Cell::new(Method::from_http(req.method)),
-                uri: RefCell::new(Uri(req.uri)),
+                uri: UriCell::new(Uri(req.uri)),
                 query_params: OnceCell::new(),
                 headers: Headers(RefCell::new(req.headers)),
                 cache: Cache::default(),
@@ -131,12 +133,26 @@ impl Request {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Uri(http::Uri);
 
 impl Uri {
     pub fn query(&self) -> Option<&str> {
         self.0.query()
+    }
+}
+
+impl std::fmt::Display for Uri {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl FromStr for Uri {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        s.parse().map(Uri).map_err(drop)
     }
 }
 
@@ -186,6 +202,9 @@ impl Cache {
         T: Send + Sync + 'static,
     {
         let borrowed = self.guard.borrow_mut();
+        // SAFETY: `borrowed` guarantees mutual exclusion,
+        // and we can return a borrow because values are
+        // boxed and so have a stable address
         let value = unsafe {
             (*self.map.get())
                 .get(&TypeId::of::<T>())
@@ -202,6 +221,7 @@ impl Cache {
         let borrowed = self.guard.borrow_mut();
         let id = TypeId::of::<T>();
         let map = self.map.get();
+        // SAFETY: `borrowed` guarantees mutual exclusion
         let had = unsafe {
             let had = (*map).contains_key(&id);
             if !had {
@@ -215,6 +235,7 @@ impl Cache {
 }
 
 cfg_send! {
+    // SAFETY: all accesses of the map are done through the RefCell
     unsafe impl Send for Cache where RefCell<()>: Send {}
     unsafe impl Sync for Cache where RefCell<()>: Sync {}
 }
@@ -280,4 +301,76 @@ impl Method {
             Method::Connect => http::Method::CONNECT,
         }
     }
+}
+
+/// A linked-list of `Uri`s.
+///
+/// URIs are likely to be read a lot, and only maybe
+/// mutated conditionally in a middleware. By never
+/// deallocating new URI values until the request is
+/// dropped, we impose an extra allocation for
+/// stores but make reads effectively free.
+struct UriCell {
+    root: AtomicPtr<UriNode>,
+}
+
+struct UriNode {
+    uri: Uri,
+    next: AtomicPtr<UriNode>,
+}
+
+impl UriCell {
+    pub fn new(uri: Uri) -> Self {
+        Self {
+            root: AtomicPtr::new(Box::into_raw(Box::new(UriNode {
+                uri,
+                next: AtomicPtr::new(std::ptr::null_mut()),
+            }))),
+        }
+    }
+
+    pub fn get(&self) -> &Uri {
+        // SAFETY: nodes are never deallocated until the list is
+        // dropped, and root is never null
+        unsafe { &(*self.root.load(Ordering::Acquire)).uri }
+    }
+
+    pub fn set(&self, uri: Uri) {
+        let node = Box::into_raw(Box::new(UriNode {
+            uri,
+            // Technically we could lose a node in between this
+            // load and the store, but the request is going to be
+            // handled by one task anyways.
+            next: AtomicPtr::new(self.root.load(Ordering::Acquire)),
+        }));
+
+        self.root.store(node, Ordering::Release);
+    }
+}
+
+impl Drop for UriCell {
+    fn drop(&mut self) {
+        let mut node = *self.root.get_mut();
+        while !node.is_null() {
+            // SAFETY: &mut self guarantees we have unique
+            // access to the nodes, which were create from
+            // Box::into_raw
+            let mut uri = unsafe { Box::from_raw(node) };
+            node = *uri.next.get_mut();
+        }
+    }
+}
+
+#[test]
+fn uricell() {
+    let uri = UriCell::new("https://www.rust-lang.org/install.html".parse().unwrap());
+    assert_eq!(
+        uri.get().to_string(),
+        "https://www.rust-lang.org/install.html"
+    );
+    uri.set("www.golang.org".parse().unwrap());
+    assert_eq!(uri.get().to_string(), "www.golang.org");
+    uri.set("www.goolang.org".parse().unwrap());
+    assert_eq!(uri.get().to_string(), "www.goolang.org");
+    drop(uri);
 }
