@@ -93,15 +93,15 @@ where
         H: Handler<C>,
         C: Context,
     {
-        self.route(path, Method::Get, handler)
+        self.route(path, Method::GET, handler)
     }
 
-    route!(put => Put);
-    route!(post => Post);
-    route!(head => Head);
-    route!(patch => Patch);
-    route!(delete => Delete);
-    route!(options => Options);
+    route!(put => PUT);
+    route!(post => POST);
+    route!(head => HEAD);
+    route!(patch => PATCH);
+    route!(delete => DELETE);
+    route!(options => OPTIONS);
 
     /// Inject global application state.
     ///

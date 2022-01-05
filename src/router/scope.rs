@@ -93,11 +93,11 @@ impl<W> Scope<W>
 where
     W: Wrap<Request>,
 {
-    route!(get => Get);
-    route!(put => Put);
-    route!(post => Post);
-    route!(head => Head);
-    route!(patch => Patch);
-    route!(delete => Delete);
-    route!(options => Options);
+    route!(get => GET);
+    route!(put => PUT);
+    route!(post => POST);
+    route!(head => HEAD);
+    route!(patch => PATCH);
+    route!(delete => DELETE);
+    route!(options => OPTIONS);
 }

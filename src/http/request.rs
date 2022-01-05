@@ -1,26 +1,30 @@
 use super::Body;
-use crate::bounded::{cfg_send, Cell, OnceCell, Rc, RefCell};
+use crate::bounded::{cfg_send, OnceCell, Rc, RefCell};
 use crate::state::{AppState, State};
 
 use std::any::{Any, TypeId};
+use std::borrow::Borrow;
 use std::cell::UnsafeCell;
 use std::collections::HashMap;
 use std::hash::{BuildHasherDefault, Hasher};
+use std::ops::Deref;
 use std::str::FromStr;
-use std::sync::atomic::{AtomicPtr, Ordering};
+use std::sync::atomic::{AtomicU8, Ordering};
 
 /// An HTTP method.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
-pub enum Method {
-    Get,
-    Put,
-    Post,
-    Delete,
-    Options,
-    Head,
-    Trace,
-    Connect,
-    Patch,
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Method(u8);
+
+impl Method {
+    pub const GET: Method = Method(0);
+    pub const PUT: Method = Method(1);
+    pub const POST: Method = Method(2);
+    pub const DELETE: Method = Method(3);
+    pub const OPTIONS: Method = Method(4);
+    pub const HEAD: Method = Method(5);
+    pub const TRACE: Method = Method(6);
+    pub const CONNECT: Method = Method(7);
+    pub const PATCH: Method = Method(8);
 }
 
 /// An HTTP request.
@@ -30,8 +34,8 @@ pub struct Request {
 }
 
 pub struct Shared {
-    method: Cell<Method>,
-    uri: UriCell,
+    method: AtomicU8,
+    uri: RefCell<Uri>,
     state: AppState,
     headers: Headers,
     cache: Cache,
@@ -42,19 +46,19 @@ pub struct Shared {
 
 impl Request {
     pub fn method(&self) -> Method {
-        self.shared.method.get()
+        Method(self.shared.method.load(Ordering::Relaxed))
     }
 
     pub fn set_method(&self, method: Method) {
-        self.shared.method.set(method);
+        self.shared.method.store(method.0, Ordering::Relaxed);
     }
 
-    pub fn uri(&self) -> &Uri {
-        self.shared.uri.get()
+    pub fn uri(&self) -> Uri {
+        self.shared.uri.borrow_mut().clone()
     }
 
     pub fn set_uri(&self, uri: Uri) {
-        self.shared.uri.set(uri);
+        *self.shared.uri.borrow_mut() = uri;
     }
 
     pub fn headers(&self) -> &Headers {
@@ -66,7 +70,7 @@ impl Request {
     }
 
     pub fn query(&self, name: &str) -> Option<&str> {
-        if let Some(query) = self.shared.uri.get().query() {
+        if let Some(query) = self.shared.uri.borrow_mut().query() {
             return self
                 .shared
                 .query_params
@@ -122,8 +126,8 @@ impl Request {
 
         Some(Request {
             shared: Rc::new(Shared {
-                method: Cell::new(Method::from_http(req.method)?),
-                uri: UriCell::new(Uri(req.uri)),
+                method: AtomicU8::new(Method::from_http(req.method)?.0),
+                uri: RefCell::new(Uri(req.uri)),
                 query_params: OnceCell::new(),
                 headers: Headers(RefCell::new(req.headers)),
                 cache: Cache::default(),
@@ -162,8 +166,53 @@ impl FromStr for Uri {
 pub struct Headers(RefCell<http::HeaderMap>);
 
 impl Headers {
-    pub fn get(&self, key: http::header::HeaderName) -> Option<http::HeaderValue> {
-        self.0.borrow_mut().get(key).cloned()
+    pub fn get(&self, key: http::header::HeaderName) -> Option<HeaderValue> {
+        self.0
+            .borrow_mut()
+            .get(key)
+            .filter(|value| value.to_str().is_ok())
+            .cloned()
+            .map(HeaderValue)
+    }
+}
+
+pub struct HeaderValue(http::HeaderValue);
+
+impl HeaderValue {
+    pub fn as_str(&self) -> &str {
+        unsafe { std::str::from_utf8_unchecked(self.0.as_bytes()) }
+    }
+}
+
+impl Deref for HeaderValue {
+    type Target = str;
+
+    fn deref(&self) -> &Self::Target {
+        self.as_str()
+    }
+}
+
+impl AsRef<str> for HeaderValue {
+    fn as_ref(&self) -> &str {
+        &*self
+    }
+}
+
+impl Borrow<str> for HeaderValue {
+    fn borrow(&self) -> &str {
+        &*self
+    }
+}
+
+impl PartialEq<str> for HeaderValue {
+    fn eq(&self, other: &str) -> bool {
+        &*self == other
+    }
+}
+
+impl PartialEq<HeaderValue> for str {
+    fn eq(&self, other: &HeaderValue) -> bool {
+        self == &*other
     }
 }
 
@@ -263,27 +312,27 @@ impl Method {
     fn from_http(method: http::Method) -> Option<Self> {
         let method = match method.as_str().len() {
             3 => match method {
-                http::Method::GET => Method::Get,
-                http::Method::PUT => Method::Put,
+                http::Method::GET => Method::GET,
+                http::Method::PUT => Method::PUT,
                 _ => return None,
             },
             4 => match method {
-                http::Method::POST => Method::Post,
-                http::Method::HEAD => Method::Head,
+                http::Method::POST => Method::POST,
+                http::Method::HEAD => Method::HEAD,
                 _ => return None,
             },
             5 => match method {
-                http::Method::PATCH => Method::Patch,
-                http::Method::TRACE => Method::Trace,
+                http::Method::PATCH => Method::PATCH,
+                http::Method::TRACE => Method::TRACE,
                 _ => return None,
             },
             6 => match method {
-                http::Method::DELETE => Method::Delete,
+                http::Method::DELETE => Method::DELETE,
                 _ => return None,
             },
             7 => match method {
-                http::Method::OPTIONS => Method::Options,
-                http::Method::CONNECT => Method::Connect,
+                http::Method::OPTIONS => Method::OPTIONS,
+                http::Method::CONNECT => Method::CONNECT,
                 _ => return None,
             },
             _ => return None,
@@ -294,87 +343,16 @@ impl Method {
 
     pub(crate) fn into_http(self) -> http::Method {
         match self {
-            Method::Get => http::Method::GET,
-            Method::Put => http::Method::PUT,
-            Method::Post => http::Method::POST,
-            Method::Head => http::Method::HEAD,
-            Method::Patch => http::Method::PATCH,
-            Method::Trace => http::Method::TRACE,
-            Method::Delete => http::Method::DELETE,
-            Method::Options => http::Method::OPTIONS,
-            Method::Connect => http::Method::CONNECT,
+            Method::GET => http::Method::GET,
+            Method::PUT => http::Method::PUT,
+            Method::POST => http::Method::POST,
+            Method::HEAD => http::Method::HEAD,
+            Method::PATCH => http::Method::PATCH,
+            Method::TRACE => http::Method::TRACE,
+            Method::DELETE => http::Method::DELETE,
+            Method::OPTIONS => http::Method::OPTIONS,
+            Method::CONNECT => http::Method::CONNECT,
+            _ => unreachable!(),
         }
     }
-}
-
-/// A linked-list of `Uri`s.
-///
-/// URIs are likely to be read a lot, and only maybe
-/// mutated conditionally in a middleware. By never
-/// deallocating new URI values until the request is
-/// dropped, we impose an extra allocation for
-/// stores but make reads effectively free.
-struct UriCell {
-    root: AtomicPtr<UriNode>,
-}
-
-struct UriNode {
-    uri: Uri,
-    next: AtomicPtr<UriNode>,
-}
-
-impl UriCell {
-    pub fn new(uri: Uri) -> Self {
-        Self {
-            root: AtomicPtr::new(Box::into_raw(Box::new(UriNode {
-                uri,
-                next: AtomicPtr::new(std::ptr::null_mut()),
-            }))),
-        }
-    }
-
-    pub fn get(&self) -> &Uri {
-        // SAFETY: nodes are never deallocated until the list is
-        // dropped, and root is never null
-        unsafe { &(*self.root.load(Ordering::Acquire)).uri }
-    }
-
-    pub fn set(&self, uri: Uri) {
-        let node = Box::into_raw(Box::new(UriNode {
-            uri,
-            // Technically we could lose a node in between this
-            // load and the store, but the request is going to be
-            // handled by one task anyways.
-            next: AtomicPtr::new(self.root.load(Ordering::Acquire)),
-        }));
-
-        self.root.store(node, Ordering::Release);
-    }
-}
-
-impl Drop for UriCell {
-    fn drop(&mut self) {
-        let mut ptr = *self.root.get_mut();
-        while !ptr.is_null() {
-            // SAFETY: &mut self guarantees we have unique
-            // access to the nodes, which were create from
-            // Box::into_raw
-            let mut node = unsafe { Box::from_raw(ptr) };
-            ptr = *node.next.get_mut();
-        }
-    }
-}
-
-#[test]
-fn uri_cell() {
-    let uri = UriCell::new("https://www.rust-lang.org/install.html".parse().unwrap());
-    assert_eq!(
-        uri.get().to_string(),
-        "https://www.rust-lang.org/install.html"
-    );
-    uri.set("www.golang.org".parse().unwrap());
-    assert_eq!(uri.get().to_string(), "www.golang.org");
-    uri.set("www.goolang.org".parse().unwrap());
-    assert_eq!(uri.get().to_string(), "www.goolang.org");
-    drop(uri);
 }

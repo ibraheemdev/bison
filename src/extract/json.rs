@@ -1,5 +1,5 @@
 use crate::extract::arg::DefaultArgument;
-use crate::extract::{body, BodyConfig, BodyRejection};
+use crate::extract::{self, BodyConfig, BodyRejection};
 use crate::http::{header, Body, Bytes, Request, ResponseBuilder, StatusCode};
 use crate::{Reject, Response};
 
@@ -18,7 +18,7 @@ where
         return Err(JsonRejection(JsonRejectionKind::ContentType));
     }
 
-    let body: Bytes = body(req, BodyConfig::new().limit(config.limit))
+    let body = extract::body::<Bytes>(req, BodyConfig::new().limit(config.limit))
         .await
         .map_err(|err| JsonRejection(JsonRejectionKind::Body(err)))?;
 
@@ -57,8 +57,6 @@ fn is_json(req: &Request) -> bool {
     let mime = || {
         req.headers()
             .get(header::CONTENT_TYPE)?
-            .to_str()
-            .ok()?
             .parse::<mime::Mime>()
             .ok()
     };

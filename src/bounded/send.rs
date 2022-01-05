@@ -4,7 +4,6 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use crossbeam_utils::atomic::AtomicCell;
 use futures_core::Stream;
 
 pub use std::marker::{Send, Sync};
@@ -110,21 +109,21 @@ impl<'b, T> std::ops::DerefMut for RefMut<'b, T> {
     }
 }
 
-/// A thread-safe mutable memory location.
-pub struct Cell<T>(AtomicCell<T>);
-
-impl<T> Cell<T> {
-    pub fn new(val: T) -> Self {
-        Self(AtomicCell::new(val))
-    }
-
-    pub fn set(&self, val: T) {
-        self.0.store(val);
-    }
-}
-
-impl<T: Copy> Cell<T> {
-    pub fn get(&self) -> T {
-        self.0.load()
-    }
-}
+// /// A thread-safe mutable memory location.
+// pub struct Cell<T>(AtomicCell<T>);
+// 
+// impl<T> Cell<T> {
+//     pub fn new(val: T) -> Self {
+//         Self(AtomicCell::new(val))
+//     }
+// 
+//     pub fn set(&self, val: T) {
+//         self.0.store(val);
+//     }
+// }
+// 
+// impl<T: Copy> Cell<T> {
+//     pub fn get(&self) -> T {
+//         self.0.load()
+//     }
+// }

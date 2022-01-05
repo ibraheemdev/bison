@@ -1,5 +1,5 @@
 use crate::extract::arg::DefaultArgument;
-use crate::extract::{body, BodyConfig, BodyRejection};
+use crate::extract::{self, BodyConfig, BodyRejection};
 use crate::http::{header, Body, Bytes, Request, ResponseBuilder, StatusCode};
 use crate::{Reject, Response};
 
@@ -18,7 +18,7 @@ where
         return Err(FormRejection(FormRejectionKind::ContentType));
     }
 
-    let body: Bytes = body(req, BodyConfig::new().limit(config.limit))
+    let body = extract::body::<Bytes>(req, BodyConfig::new().limit(config.limit))
         .await
         .map_err(|err| FormRejection(FormRejectionKind::Body(err)))?;
 
@@ -26,9 +26,9 @@ where
 }
 
 fn is_url_encoded(req: &Request) -> bool {
-    match req.headers().get(header::CONTENT_TYPE) {
-        Some(x) => x.to_str().ok() == Some("application/x-www-form-urlencoded"),
-        None => false,
+    match req.headers().get(header::CONTENT_TYPE).as_deref() {
+        Some("application/x-www-form-urlencoded") => true,
+        _ => false,
     }
 }
 
