@@ -9,8 +9,11 @@ pub use body::Body;
 pub(crate) mod request;
 pub use request::{Method, Request};
 
+pub mod header;
+pub use header::Headers;
+
 pub use bytes::Bytes;
-pub use http::{header, Extensions, HeaderValue, StatusCode};
+pub use http::{Extensions, StatusCode};
 
 /// An HTTP response.
 ///

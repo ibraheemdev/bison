@@ -1,13 +1,11 @@
-use super::Body;
 use crate::bounded::{cfg_send, OnceCell, Rc, RefCell};
+use crate::http::{Body, Headers};
 use crate::state::{AppState, State};
 
 use std::any::{Any, TypeId};
-use std::borrow::Borrow;
 use std::cell::UnsafeCell;
 use std::collections::HashMap;
 use std::hash::{BuildHasherDefault, Hasher};
-use std::ops::Deref;
 use std::str::FromStr;
 use std::sync::atomic::{AtomicU8, Ordering};
 
@@ -129,7 +127,7 @@ impl Request {
                 method: AtomicU8::new(Method::from_http(req.method)?.0),
                 uri: RefCell::new(Uri(req.uri)),
                 query_params: OnceCell::new(),
-                headers: Headers(RefCell::new(req.headers)),
+                headers: Headers::from_http(req.headers),
                 cache: Cache::default(),
                 route_params,
                 body,
@@ -159,60 +157,6 @@ impl FromStr for Uri {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         s.parse().map(Uri).map_err(drop)
-    }
-}
-
-#[derive(Clone, PartialEq, Default)]
-pub struct Headers(RefCell<http::HeaderMap>);
-
-impl Headers {
-    pub fn get(&self, key: http::header::HeaderName) -> Option<HeaderValue> {
-        self.0
-            .borrow_mut()
-            .get(key)
-            .filter(|value| value.to_str().is_ok())
-            .cloned()
-            .map(HeaderValue)
-    }
-}
-
-pub struct HeaderValue(http::HeaderValue);
-
-impl HeaderValue {
-    pub fn as_str(&self) -> &str {
-        unsafe { std::str::from_utf8_unchecked(self.0.as_bytes()) }
-    }
-}
-
-impl Deref for HeaderValue {
-    type Target = str;
-
-    fn deref(&self) -> &Self::Target {
-        self.as_str()
-    }
-}
-
-impl AsRef<str> for HeaderValue {
-    fn as_ref(&self) -> &str {
-        &*self
-    }
-}
-
-impl Borrow<str> for HeaderValue {
-    fn borrow(&self) -> &str {
-        &*self
-    }
-}
-
-impl PartialEq<str> for HeaderValue {
-    fn eq(&self, other: &str) -> bool {
-        &*self == other
-    }
-}
-
-impl PartialEq<HeaderValue> for str {
-    fn eq(&self, other: &HeaderValue) -> bool {
-        self == &*other
     }
 }
 
