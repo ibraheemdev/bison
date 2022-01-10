@@ -23,17 +23,20 @@ where
 }
 
 #[crate::async_trait_internal]
-impl<F, C, O, R> Handler<(C,)> for F
+impl<'req, F, C, O, R> Handler<(C,)> for F
 where
     F: Fn(C) -> O + Send + Sync + 'static,
-    O: Future<Output = R> + Send,
-    C: Context,
+    O: Future<Output = R> + Send + 'req,
+    C: Context<'req>,
     R: Respond,
 {
     type Response = Response;
     type Rejection = Rejection;
 
-    async fn call(&self, (cx,): (C,)) -> Result<Response, Rejection> {
+    async fn call(&self, (cx,): (C,)) -> Result<Response, Rejection>
+    where
+        C: 'async_trait,
+    {
         self(cx).await.respond().map_err(Rejection::new)
     }
 }

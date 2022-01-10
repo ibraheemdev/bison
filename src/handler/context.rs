@@ -21,32 +21,35 @@ use std::task::{self, Poll};
 ///     format!("Hello {}!", cx.name)
 /// }
 /// ```
-pub trait Context: Send + Sync + Sized + 'static {
+pub trait Context<'req>: Send + Sync + Sized + 'req {
     type Future: Future<Output = Result<Self, Rejection>> + Send;
 
-    fn extract(req: Request) -> Self::Future;
+    fn extract(req: &'req Request) -> Self::Future;
 }
 
-impl Context for Request {
+impl<'req> Context<'req> for &'req Request {
     type Future = Ready<Result<Self, Rejection>>;
 
-    fn extract(req: Request) -> Self::Future {
+    fn extract(req: &'req Request) -> Self::Future {
         ready(Ok(req))
     }
 }
 
-impl Context for () {
+impl<'req> Context<'req> for () {
     type Future = Ready<Result<Self, Rejection>>;
 
-    fn extract(_: Request) -> Self::Future {
+    fn extract(_: &'req Request) -> Self::Future {
         ready(Ok(()))
     }
 }
 
-impl<T: Context> Context for (T,) {
+impl<'req, T> Context<'req> for (T,)
+where
+    T: Context<'req>,
+{
     type Future = TupleFut<T::Future>;
 
-    fn extract(req: Request) -> Self::Future {
+    fn extract(req: &'req Request) -> Self::Future {
         TupleFut {
             fut: T::extract(req),
         }

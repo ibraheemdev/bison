@@ -2,13 +2,12 @@
 
 mod context;
 mod erased;
-mod extract;
 mod function;
 mod wrapped;
 
 pub use context::Context;
-pub(crate) use erased::{erase, Erased};
-pub(crate) use extract::Extract;
+pub use erased::Static;
+pub(crate) use erased::{erase, Erased, Extract};
 pub use wrapped::Wrapped;
 
 use crate::bounded::{Send, Sync};
@@ -20,7 +19,7 @@ use crate::{Respond, Wrap};
 /// You should not need to interact this trait directly, it is automatically
 /// implemented for handler functions.
 #[crate::async_trait_internal]
-pub trait Handler<C>: Send + Sync + 'static {
+pub trait Handler<C>: Send + Sync {
     /// The handler's response.
     type Response: Respond;
 
@@ -28,12 +27,15 @@ pub trait Handler<C>: Send + Sync + 'static {
     type Rejection: IntoRejection;
 
     /// Call the handler with some context about the request.
-    async fn call(&self, cx: C) -> Result<Self::Response, Self::Rejection>;
+    async fn call(&self, cx: C) -> Result<Self::Response, Self::Rejection>
+    where
+        C: 'async_trait;
 
     /// Wrap a handler with some middleware.
-    fn wrap<W, WC>(self, wrap: W) -> Wrapped<Self, C, W, WC>
+    fn wrap<'req, W, WC>(self, wrap: W) -> Wrapped<Self, C, W, WC>
     where
-        W: Wrap<WC>,
+        W: Wrap<'req, WC>,
+        WC: Context<'req>,
         Self: Sized,
     {
         Wrapped::new(self, wrap)

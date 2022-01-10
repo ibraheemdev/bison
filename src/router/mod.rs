@@ -1,11 +1,12 @@
 mod scope;
 pub use scope::Scope;
 
-use crate::http::{self, header, Body, Method, Request, Response, ResponseBuilder, StatusCode};
+use crate::http::{self, Body, Method, Request, Response, ResponseBuilder, StatusCode};
 use crate::reject::IntoRejection;
 use crate::state::AppState;
 use crate::wrap::{Call, Wrap};
 use crate::{handler, Context, Respond};
+use ::http::header; // TODO
 
 use std::collections::HashMap;
 
@@ -14,7 +15,7 @@ use matchit::Node;
 
 pub struct Router<W> {
     wrap: W,
-    routes: HashMap<HttpMethod, Node<Box<handler::Erased>>>,
+    routes: HashMap<HttpMethod, Node<handler::Erased>>,
 }
 
 impl Router<Call> {
@@ -26,14 +27,14 @@ impl Router<Call> {
     }
 }
 
-impl<W> Router<W>
+impl<'g, W> Router<W>
 where
-    W: Wrap<Request>,
+    W: Wrap<'g, &'g Request>,
 {
-    pub(crate) fn wrap<O, C>(self, wrap: O) -> Router<impl Wrap>
+    pub(crate) fn wrap<O, C>(self, wrap: O) -> Router<impl Wrap<'g, &'g Request>>
     where
-        O: Wrap<C>,
-        C: Context,
+        O: Wrap<'g, C>,
+        C: Context<'g>,
     {
         Router {
             wrap: self.wrap.wrap(wrap),
@@ -45,7 +46,7 @@ where
         mut self,
         method: Method,
         path: impl Into<String>,
-        handler: Box<handler::Erased>,
+        handler: handler::Erased,
     ) -> Result<Self, matchit::InsertError> {
         self.routes
             .entry(method.into_http())
@@ -112,7 +113,7 @@ where
                         }
                     };
 
-                    match self.wrap.call(req.clone(), handler).await {
+                    match self.wrap.call(&req, handler).await {
                         Ok(ok) => match ok.respond() {
                             Ok(ok) => ok,
                             Err(err) => err.into_response_error().reject(&req),

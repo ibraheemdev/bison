@@ -2,9 +2,10 @@ use bytes::{Bytes, BytesMut};
 
 use crate::bounded::BoxError;
 use crate::extract::arg::DefaultArgument;
-use crate::http::{header, Body, Request, Response, ResponseBuilder, StatusCode};
+use crate::http::{Body, Request, Response, ResponseBuilder, StatusCode};
 use crate::util::_try;
 use crate::Reject;
+use ::http::header; // TODO
 
 use std::convert::Infallible;
 use std::fmt;

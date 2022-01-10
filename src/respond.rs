@@ -1,8 +1,9 @@
 use std::borrow::Cow;
 use std::convert::Infallible;
 
-use crate::http::{header, Body, Bytes, Response, ResponseBuilder, StatusCode};
+use crate::http::{Body, Bytes, Response, ResponseBuilder, StatusCode};
 use crate::reject::{IntoRejection, NotFound, Rejection};
+use ::http::header; // TODO
 
 /// A type that can be converted into an HTTP response.
 pub trait Respond {
