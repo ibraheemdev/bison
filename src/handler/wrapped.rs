@@ -3,23 +3,13 @@ use crate::http::{Request, Response};
 use crate::reject::IntoRejection;
 use crate::{Rejection, Wrap};
 
-use std::marker::{PhantomData, PhantomPinned};
-
-use super::erased::Static;
+use std::marker::PhantomData;
 
 /// A handler wrapped with some middleware.
 pub struct Wrapped<H, C, W, WC> {
     wrap: W,
     handler: Extract<H, C>,
     _cx: PhantomData<(C, WC)>,
-    _x: PhantomPinned,
-}
-
-unsafe impl<H, C, W, WC> Static for Wrapped<H, C, W, WC>
-where
-    W: 'static,
-    Extract<H, C>: 'static,
-{
 }
 
 impl<H, C, W, WC> Wrapped<H, C, W, WC> {
@@ -33,18 +23,18 @@ impl<H, C, W, WC> Wrapped<H, C, W, WC> {
 }
 
 #[crate::async_trait_internal]
-impl<'req, H, C, W, WC> Handler<&'req Request> for Wrapped<H, C, W, WC>
+impl<H, C, W, WC> Handler<Request> for Wrapped<H, C, W, WC>
 where
-    W: Wrap<'req, WC>,
+    W: Wrap<WC>,
     H: Handler<C>,
-    C: Context<'req>,
-    WC: Context<'req>,
+    C: Context,
+    WC: Context,
 {
     type Response = Response;
     type Rejection = Rejection;
 
-    async fn call(&self, req: &'req Request) -> Result<Response, Rejection> {
-        let cx = WC::extract(&req).await?;
+    async fn call(&self, req: Request) -> Result<Response, Rejection> {
+        let cx = WC::extract(req).await?;
 
         self.wrap
             .call(cx, &self.handler)

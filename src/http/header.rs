@@ -1,27 +1,27 @@
 use crate::bounded::RefCell;
 use crate::http::RcStr;
 
+use std::borrow::Borrow;
 use std::cmp::Ordering;
 use std::collections::{hash_map, HashMap};
 use std::hash::{Hash, Hasher};
 use std::iter;
+use std::ops::Deref;
 use std::{fmt, mem};
 
-pub struct Headers {
+pub struct HeaderMap {
     map: RefCell<HashMap<HeaderName, HeaderValue>>,
 }
 
-impl Headers {
-    pub fn new() -> Headers {
-        Headers {
+impl HeaderMap {
+    pub fn new() -> HeaderMap {
+        HeaderMap {
             map: RefCell::new(HashMap::new()),
         }
     }
 
     pub fn contains(&self, name: &str) -> bool {
-        self.map
-            .borrow_mut()
-            .contains_key(&HeaderName(name.to_owned().into()))
+        self.map.borrow_mut().contains_key(name)
     }
 
     pub fn len(&self) -> usize {
@@ -37,7 +37,7 @@ impl Headers {
             None,
             Once(iter::Once<RcStr>),
             Many {
-                map: &'a Headers,
+                map: &'a HeaderMap,
                 name: &'a str,
                 index: usize,
             },
@@ -51,12 +51,7 @@ impl Headers {
                     Impl::None => None,
                     Impl::Once(value) => value.next(),
                     Impl::Many { map, name, index } => {
-                        match map
-                            .map
-                            .borrow_mut()
-                            .get(&HeaderName(name.to_owned().into()))
-                            .unwrap()
-                        {
+                        match map.map.borrow_mut().get(*name).unwrap() {
                             HeaderValue::Many(values) => values.get(*index).map(|value| {
                                 *index += 1;
                                 value.clone()
@@ -68,12 +63,7 @@ impl Headers {
             }
         }
 
-        match self
-            .map
-            .borrow_mut()
-            .get(&HeaderName(name.to_owned().into()))
-            .cloned()
-        {
+        match self.map.borrow_mut().get(name).cloned() {
             Some(HeaderValue::One(item)) => Impl::Once(iter::once(item)),
             Some(HeaderValue::Many(_)) => Impl::Many {
                 map: self,
@@ -85,13 +75,10 @@ impl Headers {
     }
 
     pub fn first(&self, name: &str) -> Option<RcStr> {
-        self.map
-            .borrow_mut()
-            .get(&HeaderName(name.to_owned().into()))
-            .map(|value| match value {
-                HeaderValue::One(value) => value.clone(),
-                HeaderValue::Many(values) => values.first().unwrap().clone(),
-            })
+        self.map.borrow_mut().get(name).map(|value| match value {
+            HeaderValue::One(value) => value.clone(),
+            HeaderValue::Many(values) => values.first().unwrap().clone(),
+        })
     }
 
     pub fn replace<N, V>(&self, name: N, value: V)
@@ -122,7 +109,7 @@ impl Headers {
     pub(crate) fn from_http(mut http_map: ::http::HeaderMap) -> Self {
         let mut drain = http_map.drain();
         let (first_name, first_value) = match drain.next() {
-            None => return Headers::new(),
+            None => return HeaderMap::new(),
             Some((name, value)) => {
                 let name = RcStr::from(name.unwrap().as_str());
                 let value = value.to_str().map(RcStr::from);
@@ -136,9 +123,7 @@ impl Headers {
             map: RefCell::new(HashMap::with_capacity(lower)),
         };
 
-        if let Ok(value) = first_value {
-            headers.add(first_name.clone(), value);
-        }
+        headers.append(first_name.clone(), first_value);
 
         let (headers, _) = drain.fold(
             (headers, first_name),
@@ -148,7 +133,7 @@ impl Headers {
                     .unwrap_or(prev_name);
 
                 if let Some(value) = value.to_str().ok().map(RcStr::from) {
-                    headers.add(name.clone(), value);
+                    headers.add((name.clone(), value));
                 }
 
                 (headers, name)
@@ -159,7 +144,7 @@ impl Headers {
     }
 }
 
-#[derive(Eq, PartialEq)]
+#[derive(Eq)]
 pub struct HeaderName(RcStr);
 
 #[derive(Clone)]
@@ -203,13 +188,9 @@ where
     }
 }
 
-impl std::ops::Deref for HeaderName {
-    type Target = str;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
+// impl From<Vec<RcStr>> for HeaderValue {
+//     fn from(values: Vec<RcStr>) -> Self {
+//     }
 
 impl PartialEq<str> for HeaderName {
     fn eq(&self, other: &str) -> bool {

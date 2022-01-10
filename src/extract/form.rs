@@ -1,8 +1,7 @@
 use crate::extract::arg::DefaultArgument;
 use crate::extract::{self, BodyConfig, BodyRejection};
-use crate::http::{Body, Bytes, Request, ResponseBuilder, StatusCode};
+use crate::http::{header, Body, Bytes, Request, ResponseBuilder, StatusCode};
 use crate::{Reject, Response};
-use ::http::header; // TODO
 
 use serde::de::DeserializeOwned;
 

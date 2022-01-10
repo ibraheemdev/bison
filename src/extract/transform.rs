@@ -13,7 +13,10 @@ pub trait Transform<T>: Sized {
     fn transform(result: Result<T, Rejection>) -> Result<Self, Rejection>;
 }
 
-impl<T> Transform<T> for T {
+impl<T> Transform<T> for T
+where
+    T: Unpin,
+{
     type Ok = T;
 
     fn transform(result: Result<T, Rejection>) -> Result<Self, Rejection> {

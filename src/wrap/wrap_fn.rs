@@ -50,24 +50,24 @@ where
     }
 }
 
-pub fn __internal_wrap_fn<'g, F, E, C>(f: F) -> impl Wrap<'g, C>
+pub fn __internal_wrap_fn<F, E, C>(f: F) -> impl Wrap<C>
 where
     for<'a> F: WrapFn<'a, C, Error = E>,
     E: IntoRejection + 'static,
-    C: Context<'g>,
+    C: Context,
 {
     struct Impl<F, E, C>(F, PhantomData<(E, C)>);
 
     #[crate::async_trait_internal]
-    impl<'req, F, E, C> Wrap<'req, C> for Impl<F, E, C>
+    impl<F, E, C> Wrap<C> for Impl<F, E, C>
     where
         for<'a> F: WrapFn<'a, C, Error = E>,
         E: IntoRejection + 'static,
-        C: Context<'req>,
+        C: Context,
     {
         type Rejection = E;
 
-        async fn call(&self, cx: C, next: impl Next<'req>) -> Result<Response, Self::Rejection> {
+        async fn call(&self, cx: C, next: &impl Next) -> Result<Response, Self::Rejection> {
             self.0.call(cx, next).await
         }
     }

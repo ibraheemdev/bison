@@ -23,13 +23,12 @@ use crate::Request;
 ///     .register(Tera::new("./templates"))
 ///     .inject(Database::connect("localhost:20717"));
 /// ```
-pub struct Bison<'g, W> {
+pub struct Bison<W> {
     pub(crate) router: Router<W>,
     pub(crate) state: state::AppState,
-    guard: &'g (),
 }
 
-impl<'g> Bison<'g, Call> {
+impl Bison<Call> {
     /// Create a new `Bison`.
     ///
     /// ```
@@ -37,18 +36,17 @@ impl<'g> Bison<'g, Call> {
     ///
     /// let bison = Bison::new();
     /// ```
-    pub unsafe fn new(guard: &'g ()) -> Bison<'g, impl Wrap<&'g Request>> {
+    pub fn new() -> Bison<impl Wrap> {
         Self {
             router: Router::new(),
             state: state::AppState::new(),
-            guard,
         }
     }
 }
 
-impl<'g, W> Bison<'g, W>
+impl<W> Bison<W>
 where
-    W: Wrap<'g, &'g Request>,
+    W: Wrap<Request>,
 {
     /// Insert a route for the given method.
     ///
@@ -63,26 +61,17 @@ where
     ///
     /// let bison = Bison::new().get("/", Method::Get, home);
     /// ```
-    pub fn route<H, C>(
-        self,
-        path: &'g str, // TODO?
-        method: Method,
-        handler: H,
-    ) -> Bison<'g, impl Wrap<&'g Request>>
+    pub fn route<H, C>(self, path: &str, method: Method, handler: H) -> Self
     where
-        H: Handler<C> + 'static,
-        C: Context<'g>,
+        H: Handler<C>,
+        C: Context,
     {
-        // SAFETY: 'g acting as an HRTB is guaranteed by Scope::new
-        let handler = unsafe { handler::erase(handler, self.guard) };
-
         Bison {
             router: self
                 .router
-                .route(method, path, handler)
+                .route(method, path, handler::erase(handler))
                 .expect("failed to insert route"),
             state: self.state,
-            guard: self.guard,
         }
     }
 
@@ -99,10 +88,10 @@ where
     ///
     /// let bison = Bison::new().get("/", home);
     /// ```
-    pub fn get<H, C>(self, path: &'g str, handler: H) -> Bison<impl Wrap<&'g Request>>
+    pub fn get<H, C>(self, path: &str, handler: H) -> Bison<impl Wrap>
     where
-        H: Handler<C> + 'static,
-        C: Context<'g>,
+        H: Handler<C>,
+        C: Context,
     {
         self.route(path, Method::GET, handler)
     }
@@ -155,31 +144,28 @@ where
                 .state
                 .insert(state)
                 .expect("cannot inject state after server has started"),
-            guard: self.guard,
         }
     }
 
     /// Wrap the application with some middleware.
-    pub fn wrap<O, C>(self, wrap: O) -> Bison<'g, impl Wrap<'g, &'g Request>>
+    pub fn wrap<O, C>(self, wrap: O) -> Bison<impl Wrap>
     where
-        O: Wrap<'g, C>,
-        C: Context<'g>,
+        O: Wrap<C>,
+        C: Context,
     {
         Bison {
             router: self.router.wrap(wrap),
             state: self.state,
-            guard: self.guard,
         }
     }
 
     /// Register routes scoped under a common prefix.
-    pub fn scope<F, O>(self, prefix: &'g str, f: F) -> Bison<'g, impl Wrap<&'g Request>>
+    pub fn scope<F, O>(self, prefix: &str, f: F) -> Bison<impl Wrap>
     where
-        F: FnOnce(Scope<'g, Call>) -> Scope<'g, O>,
-        O: Wrap<'g, &'g Request>,
+        F: FnOnce(Scope<Call>) -> Scope<O>,
+        O: Wrap<Request>,
     {
-        let scope = unsafe { Scope::new(prefix, self.guard) };
-        let scope = f(scope);
+        let scope = f(Scope::new(prefix));
         scope.register(self)
     }
 
@@ -197,10 +183,10 @@ macro_rules! route {
     ($name:ident => $method:ident) => {
         #[doc = concat!("Insert a route for the `", stringify!($method), "` method.")]
         /// See [`get`](Self::get) for examples.
-        pub fn $name<H, C>(self, path: &'g str, handler: H) -> Bison<'g, impl Wrap<&'g Request>>
+        pub fn $name<H, C>(self, path: &str, handler: H) -> Bison<impl Wrap>
         where
-            H: Handler<C> + 'static,
-            C: Context<'g>,
+            H: Handler<C>,
+            C: Context,
         {
             self.route(path, Method::$method, handler)
         }
