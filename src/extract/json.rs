@@ -57,6 +57,8 @@ fn is_json(req: &Request) -> bool {
     let mime = || {
         req.headers()
             .get(header::CONTENT_TYPE)?
+            .to_str()
+            .ok()?
             .parse::<mime::Mime>()
             .ok()
     };

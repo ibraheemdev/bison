@@ -25,6 +25,8 @@ where
     if _try! {
         req.headers()
             .get(header::CONTENT_LENGTH)?
+            .to_str()
+            .ok()?
             .parse::<usize>()
             .ok()
     } > Some(config.limit)

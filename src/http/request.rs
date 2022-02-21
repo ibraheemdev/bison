@@ -127,7 +127,7 @@ impl Request {
                 method: AtomicU8::new(Method::from_http(req.method)?.0),
                 uri: RefCell::new(Uri(req.uri)),
                 query_params: OnceCell::new(),
-                headers: Headers::from_http(req.headers),
+                headers: req.headers,
                 cache: Cache::default(),
                 route_params,
                 body,

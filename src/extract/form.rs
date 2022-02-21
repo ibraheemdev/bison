@@ -26,7 +26,11 @@ where
 }
 
 fn is_url_encoded(req: &Request) -> bool {
-    match req.headers().get(header::CONTENT_TYPE).as_deref() {
+    match req
+        .headers()
+        .get(header::CONTENT_TYPE)
+        .and_then(|x| x.to_str().ok())
+    {
         Some("application/x-www-form-urlencoded") => true,
         _ => false,
     }
