@@ -1,13 +1,12 @@
 //! HTTP error handling.
 
-use crate::http::{Body, Response, StatusCode};
-use crate::Request;
+use crate::http::{Body, Request, Response, StatusCode};
 
 use std::convert::Infallible;
 use std::fmt::{self, Debug, Display};
 
 /// An error capable rejecting a request with an HTTP error esponse.
-pub trait Reject: Debug + Display + Send + Sync {
+pub trait Reject: Debug + Display + Send + Sync + 'static {
     /// Reject the request with an HTTP error esponse
     fn reject(self, req: &Request) -> Response;
 }

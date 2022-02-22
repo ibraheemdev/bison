@@ -54,7 +54,8 @@ impl Headers {
         match self.map.entry(name) {
             hash_map::Entry::Occupied(mut entry) => match entry.get_mut() {
                 HeaderValue::One(old) => {
-                    entry.insert(HeaderValue::Many(vec![mem::take(old), value]));
+                    let old = mem::take(old);
+                    entry.insert(HeaderValue::Many(vec![old, value]));
                 }
                 HeaderValue::Many(values) => {
                     values.push(value);
@@ -103,7 +104,7 @@ impl<'a> Iterator for Iter<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
-            if let Some((name, values)) = self.current {
+            if let Some((name, ref mut values)) = self.current {
                 if let Some(value) = values.next() {
                     return Some((name, value));
                 }
@@ -159,8 +160,8 @@ impl<'a> Iterator for Values<'a> {
     fn next(&mut self) -> Option<Self::Item> {
         match self.kind {
             ValuesKind::None => return None,
-            ValuesKind::One(o) => o.next(),
-            ValuesKind::Many(m) => m.next(),
+            ValuesKind::One(ref mut o) => o.next(),
+            ValuesKind::Many(ref mut m) => m.next(),
         }
         .map(|b| b.as_str())
     }
@@ -182,8 +183,8 @@ impl Iterator for Removed {
     fn next(&mut self) -> Option<Self::Item> {
         match self.kind {
             RemovedKind::None => None,
-            RemovedKind::One(o) => o.next(),
-            RemovedKind::Many(m) => m.next(),
+            RemovedKind::One(ref mut o) => o.next(),
+            RemovedKind::Many(ref mut m) => m.next(),
         }
     }
 }

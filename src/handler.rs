@@ -1,9 +1,8 @@
-use crate::reject::IntoRejection;
+use crate::context::Context;
+use crate::http::{Request, Response};
+use crate::reject::{IntoRejection, Rejection};
 use crate::respond::Respond;
 
-pub trait Handler<C> {
-    type Response: Respond;
-    type Rejection: IntoRejection;
-
-    fn call(&self, context: C) -> Result<Self::Response, Self::Rejection>;
+pub trait Handler {
+    fn call(&self, request: &Request) -> crate::Result;
 }

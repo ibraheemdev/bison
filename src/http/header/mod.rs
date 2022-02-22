@@ -23,7 +23,7 @@ where
     fn into_header(self) -> Header {
         Header {
             name: self.0.into(),
-            value: self.0.into(),
+            value: self.1.into(),
         }
     }
 }

@@ -47,12 +47,12 @@ impl Response {
 pub struct ResponseBuilder(Response);
 
 impl ResponseBuilder {
-    pub fn status(self, status: StatusCode) -> ResponseBuilder {
+    pub fn status(mut self, status: StatusCode) -> ResponseBuilder {
         self.0.status = status;
         self
     }
 
-    pub fn version(self, version: Version) -> ResponseBuilder {
+    pub fn version(mut self, version: Version) -> ResponseBuilder {
         self.0.version = version;
         self
     }
@@ -65,7 +65,7 @@ impl ResponseBuilder {
         self
     }
 
-    pub fn body(self, body: Body) -> Response {
+    pub fn body(mut self, body: Body) -> Response {
         self.0.body = body;
         self.0
     }
