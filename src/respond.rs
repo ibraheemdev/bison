@@ -1,7 +1,8 @@
 use std::borrow::Cow;
 use std::convert::Infallible;
 
-use crate::http::{header, Body, Bytes, Response, ResponseBuilder, StatusCode};
+use crate::http::header::ContentType;
+use crate::http::{Body, Bytes, Response, StatusCode};
 use crate::reject::{IntoRejection, NotFound, Rejection};
 
 /// A type that can be converted into an HTTP response.
@@ -46,7 +47,7 @@ where
 
     fn respond(self) -> Result<Response, T::Rejection> {
         self.1.respond().map(|mut response| {
-            *response.status_mut() = self.0;
+            response.status = self.0;
             response
         })
     }
@@ -79,27 +80,26 @@ where
     }
 }
 
-macro_rules! with_content_type {
-    ($($ty:ty $(|$into:ident)? => $content_type:literal),* $(,)?) => { $(
+macro_rules! respond {
+    ($($ty:ty $(|> $into:ident)? => $content_type:expr),* $(,)?) => { $(
         impl Respond for $ty {
             type Rejection = Infallible;
 
             fn respond(self) -> Result<Response, Infallible> {
-                Ok(ResponseBuilder::new()
-                    .header(header::CONTENT_TYPE, $content_type)
-                    .body(Body::once(self $(.$into())?))
-                    .unwrap())
+                Ok(Response::builder()
+                    .header($content_type)
+                    .body(Body::new(self $(.$into())?)))
             }
         })*
     }
 }
 
-with_content_type! {
-    Bytes => "application/octet-stream",
-    Vec<u8> => "application/octet-stream",
-    &'static [u8] => "application/octet-stream",
-    Cow<'static, [u8]> | into_owned => "application/octet-stream",
-    String => "text/plain",
-    &'static str => "text/plain",
-    Cow<'static, str> | into_owned => "text/plain",
+respond! {
+    Bytes => ContentType::OctetStream,
+    Vec<u8> => ContentType::OctetStream,
+    &'static [u8] => ContentType::OctetStream,
+    Cow<'static, [u8]> |> into_owned => ContentType::OctetStream,
+    String => ContentType::Text,
+    &'static str => ContentType::Text,
+    Cow<'static, str> |> into_owned => ContentType::Text,
 }

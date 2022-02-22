@@ -1,60 +1,83 @@
-//! Common HTTP types.
-
-mod rcstr;
-pub use rcstr::RcStr;
-
 mod body;
+mod bytestr;
+
+pub mod header;
+
 pub use body::Body;
-
-pub(crate) mod request;
-pub use request::{Method, Request};
-
-// pub mod header;
-// pub use header::Headers;
+pub use bytestr::ByteStr;
+pub use header::Headers;
 
 pub use bytes::Bytes;
-pub use http::{header, Extensions, HeaderMap as Headers, StatusCode};
+pub use http::{Method, StatusCode, Uri, Version};
 
-/// An HTTP response.
-///
-/// You can create a response with the [`new`](http::Response::new) method:
-///
-/// ```
-/// # use astra::{Response, Body};
-/// let response = Response::new(Body::new("Hello world!"));
-/// ```
-///
-/// Or with a [`ResponseBuilder`]:
-///
-/// ```
-/// # use astra::{ResponseBuilder, Body};
-/// let response = ResponseBuilder::new()
-///     .status(404)
-///     .header("X-Custom-Foo", "Bar")
-///     .body(Body::new("Page not found."))
-///     .unwrap();
-/// ```
-///
-/// See [`http::Response`](http::Response) for details.
-pub type Response = http::Response<Body>;
+pub struct Request {
+    /// The request's method
+    pub method: Method,
+    /// The request's URI
+    pub uri: Uri,
+    /// The request's version
+    pub version: Version,
+    /// The request's headers
+    pub headers: Headers,
+    /// The request's body.
+    pub body: Body,
+}
 
-/// A builder for an HTTP response.
-///
-/// ```
-/// use astra::{ResponseBuilder, Body};
-///
-/// let response = ResponseBuilder::new()
-///     .status(404)
-///     .header("X-Custom-Foo", "Bar")
-///     .body(Body::new("Page not found."))
-///     .unwrap();
-/// ```
-///
-/// See [`http::Response`](http::Response) and [`Body`] for details.
-pub type ResponseBuilder = http::response::Builder;
+#[derive(Debug)]
+pub struct Response {
+    /// The response's status
+    pub status: StatusCode,
 
-/// A builder for an HTTP request.
-///
-/// This is useful for testing. See [`http::request::Builder`](http::request::Builder)
-/// for details.
-pub type RequestBuilder = http::request::Builder;
+    /// The response's version
+    pub version: Version,
+
+    /// The response's headers
+    pub headers: Headers,
+
+    /// The response's body
+    pub body: Body,
+}
+
+impl Response {
+    pub fn builder() -> ResponseBuilder {
+        ResponseBuilder(Response::default())
+    }
+}
+
+pub struct ResponseBuilder(Response);
+
+impl ResponseBuilder {
+    pub fn status(self, status: StatusCode) -> ResponseBuilder {
+        self.0.status = status;
+        self
+    }
+
+    pub fn version(self, version: Version) -> ResponseBuilder {
+        self.0.version = version;
+        self
+    }
+
+    pub fn header<H>(mut self, header: H) -> ResponseBuilder
+    where
+        H: header::IntoHeader,
+    {
+        self.0.headers.insert(header);
+        self
+    }
+
+    pub fn body(self, body: Body) -> Response {
+        self.0.body = body;
+        self.0
+    }
+}
+
+impl Default for Response {
+    fn default() -> Response {
+        Response {
+            status: StatusCode::OK,
+            version: Version::HTTP_11,
+            headers: Headers::new(),
+            body: Body::empty(),
+        }
+    }
+}

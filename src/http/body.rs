@@ -1,131 +1,95 @@
-use crate::bounded::{BoxError, BoxStream, RefCell, Send, Sync};
+use std::fmt;
+use std::io;
 
-use std::error::Error as StdError;
-use std::pin::Pin;
-use std::task::{Context, Poll};
-use std::{fmt, mem};
+use bytes::Bytes;
 
-pub use bytes::Bytes;
-pub use http::{header, Extensions, HeaderValue, Method, StatusCode};
-
-use futures_core::Stream;
-
-/// Respresents the body of an HTTP message.
-pub struct Body(RefCell<BodyKind>);
-
-enum BodyKind {
-    Stream(BoxStream<'static, Result<Bytes, BoxError>>),
-    Once(Bytes),
-    Empty,
-    Taken,
-}
+/// The streaming body of an HTTP request or response.
+///
+/// Data is streamed by iterating over the body, which
+/// yields chunks as [`Bytes`].
+///
+/// ```rust
+/// use bison::{Request, Response, Body};
+///
+/// fn handle(mut req: Request) -> Response {
+///     for chunk in req.body_mut() {
+///         println!("body chunk {:?}", chunk);
+///     }
+///
+///     Response::new(Body::new("Hello World!"))
+/// }
+/// ```
+pub struct Body(astra::Body);
 
 impl Body {
-    /// Create a `Body` from a stream of bytes.
-    pub fn stream<S, E>(stream: S) -> Self
+    /// Create a body from a string or bytes.
+    ///
+    /// ```rust
+    /// # use bison::Body;
+    /// let string = Body::new("Hello world!");
+    /// let bytes = Body::new(vec![0, 1, 0, 1, 0]);
+    /// ```
+    pub fn new(data: impl Into<Bytes>) -> Body {
+        Body(astra::Body::from(data.into()))
+    }
+
+    /// Create an empty body.
+    pub fn empty() -> Body {
+        Body(astra::Body::empty())
+    }
+
+    /// Create a body from an implementor of [`io::Read`].
+    ///
+    /// ```rust
+    /// use bison::{Request, Response, ResponseBuilder, Body};
+    /// use std::fs::File;
+    ///
+    /// fn handle(_request: Request) -> Response {
+    ///     let file = File::open("index.html").unwrap();
+    ///
+    ///     ResponseBuilder::builder()
+    ///         .header("Content-Type", "text/html")
+    ///         .body(Body::wrap_reader(file))
+    ///         .unwrap()
+    /// }
+    /// ```
+    pub fn stream<R>(source: R) -> Body
     where
-        S: Stream<Item = Result<Bytes, E>> + Send + Sync + 'static,
-        E: StdError + Send + Sync + 'static,
+        R: io::Read + Send + 'static,
     {
-        pub struct MapErr<S>(S);
-
-        impl<T, E, S> Stream for MapErr<S>
-        where
-            E: StdError + Send + Sync + 'static,
-            S: Stream<Item = Result<T, E>>,
-        {
-            type Item = Result<T, BoxError>;
-
-            fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-                unsafe { self.map_unchecked_mut(|s| &mut s.0) }
-                    .poll_next(cx)
-                    .map_err(|err| Box::new(err) as _)
-            }
-        }
-
-        Body(RefCell::new(BodyKind::Stream(Box::pin(MapErr(stream)))))
-    }
-
-    pub fn try_clone(&self) -> Option<Body> {
-        let kind = match *self.0.borrow_mut() {
-            BodyKind::Stream(_) => return None,
-            BodyKind::Once(ref b) => BodyKind::Once(b.clone()),
-            BodyKind::Empty => BodyKind::Empty,
-            BodyKind::Taken => BodyKind::Taken,
-        };
-
-        Some(Body(RefCell::new(kind)))
-    }
-
-    /// Create a body directly from bytes.
-    pub fn once(bytes: impl Into<Bytes>) -> Self {
-        Body(RefCell::new(BodyKind::Once(bytes.into())))
-    }
-
-    /// Create an empty `Body`.
-    pub fn empty() -> Self {
-        Body(RefCell::new(BodyKind::Empty))
-    }
-
-    pub fn take(&self) -> Option<Body> {
-        match mem::replace(&mut *self.0.borrow_mut(), BodyKind::Taken) {
-            BodyKind::Taken => None,
-            b => Some(Body(RefCell::new(b))),
-        }
-    }
-
-    pub async fn chunk(&self) -> Option<Result<Bytes, BoxError>> {
-        let mut this = self;
-        crate::util::poll_fn(|cx| Pin::new(&mut this).poll_next(cx)).await
+        Body(astra::Body::wrap_reader(source))
     }
 }
 
-impl Stream for &Body {
-    type Item = Result<Bytes, BoxError>;
-
-    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        let mut inner = self.0.borrow_mut();
-
-        match &mut *inner {
-            BodyKind::Stream(stream) => stream.as_mut().poll_next(cx),
-            BodyKind::Once(bytes) => {
-                let bytes = mem::take(bytes);
-                *inner = BodyKind::Empty;
-                Some(Ok(bytes)).into()
-            }
-            BodyKind::Empty | BodyKind::Taken => None.into(),
-        }
-    }
-
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        match &*self.0.borrow_mut() {
-            BodyKind::Stream(stream) => stream.size_hint(),
-            BodyKind::Once(bytes) => (bytes.len(), Some(bytes.len())),
-            BodyKind::Empty | BodyKind::Taken => (0, Some(0)),
-        }
+impl<T> From<T> for Body
+where
+    Bytes: From<T>,
+{
+    fn from(data: T) -> Body {
+        Body::new(data)
     }
 }
 
-impl Stream for Body {
-    type Item = Result<Bytes, BoxError>;
+impl Iterator for Body {
+    type Item = io::Result<Bytes>;
 
-    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        <&Body>::poll_next(Pin::new(&mut &*self), cx)
+    fn next(&mut self) -> Option<Self::Item> {
+        self.0.next()
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
-        <&Body>::size_hint(&self)
+        self.0.size_hint()
+    }
+}
+
+impl fmt::Debug for Body {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(f)
     }
 }
 
 impl Default for Body {
     fn default() -> Self {
         Self::empty()
-    }
-}
-
-impl fmt::Debug for Body {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Body").finish()
     }
 }

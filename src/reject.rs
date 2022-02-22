@@ -1,7 +1,6 @@
 //! HTTP error handling.
 
-use crate::bounded::{Send, Sync};
-use crate::http::{Body, Response, ResponseBuilder, StatusCode};
+use crate::http::{Body, Response, StatusCode};
 use crate::Request;
 
 use std::convert::Infallible;
@@ -26,10 +25,8 @@ pub struct Rejection {
 
 impl Rejection {
     /// Create a new `AnyResponseError` from a given response error.
-    // TODO: remove
     pub fn new<E>(err: E) -> Self
     where
-        // TODO: remove
         E: IntoRejection,
     {
         err.into_response_error()
@@ -116,7 +113,7 @@ impl IntoRejection for Response {
 
         impl fmt::Display for Impl {
             fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                write!(f, "status {:?}: {:?}", self.0.status(), self.0.body())
+                write!(f, "status {:?}: {:?}", self.0.status, self.0.body)
             }
         }
 
@@ -142,9 +139,8 @@ impl fmt::Display for NotFound {
 
 impl Reject for NotFound {
     fn reject(self, _: &Request) -> Response {
-        ResponseBuilder::new()
+        Response::builder()
             .status(StatusCode::NOT_FOUND)
             .body(Body::empty())
-            .unwrap()
     }
 }
