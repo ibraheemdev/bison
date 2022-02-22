@@ -121,6 +121,12 @@ impl Headers {
     }
 }
 
+impl Default for Headers {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl fmt::Debug for Headers {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:?}", self.map)

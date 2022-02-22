@@ -1,9 +1,11 @@
+use super::Bytes;
+
 use std::borrow::Borrow;
 use std::fmt;
 
 /// A UTF-8 encoded string stored as [`Bytes`].
 #[derive(Clone, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct ByteStr(bytes::Bytes);
+pub struct ByteStr(Bytes);
 
 impl ByteStr {
     pub fn new(str: impl Into<ByteStr>) -> ByteStr {
@@ -11,11 +13,15 @@ impl ByteStr {
     }
 
     pub fn from_static(str: &'static str) -> ByteStr {
-        ByteStr(bytes::Bytes::from_static(str.as_bytes()))
+        ByteStr(Bytes::from_static(str.as_bytes()))
     }
 
     pub fn as_str(&self) -> &str {
         self
+    }
+
+    pub fn into_bytes(self) -> Bytes {
+        self.0
     }
 }
 

@@ -33,6 +33,12 @@ impl Version {
     }
 }
 
+impl Default for Version {
+    fn default() -> Self {
+        Version::Http1_1
+    }
+}
+
 impl fmt::Display for Version {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.as_str())

@@ -335,6 +335,12 @@ impl Status {
     }
 }
 
+impl Default for Status {
+    fn default() -> Self {
+        Status::Ok
+    }
+}
+
 impl fmt::Display for Status {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{} {}", self.code(), self.reason())

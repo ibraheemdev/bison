@@ -16,5 +16,6 @@ pub use bytestr::ByteStr;
 pub use header::Headers;
 pub use method::Method;
 pub use request::Request;
+pub use response::Response;
 pub use status::Status;
 pub use version::Version;

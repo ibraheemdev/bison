@@ -1,6 +1,6 @@
 use std::{fmt, io};
 
-use super::Bytes;
+use super::{ByteStr, Bytes};
 
 /// The streaming body of an HTTP request or response.
 ///
@@ -72,6 +72,36 @@ impl Body {
     }
 }
 
+impl Iterator for Body {
+    type Item = io::Result<Bytes>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.0.next()
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.0.size_hint()
+    }
+}
+
+impl Default for Body {
+    fn default() -> Self {
+        Self::empty()
+    }
+}
+
+impl fmt::Debug for Body {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?}", self.0)
+    }
+}
+
+impl From<ByteStr> for Body {
+    fn from(data: ByteStr) -> Body {
+        Body(astra::Body::new(data.into_bytes()))
+    }
+}
+
 impl From<&str> for Body {
     fn from(data: &str) -> Body {
         Body(astra::Body::new(data.to_owned()))
@@ -99,29 +129,5 @@ impl From<Box<[u8]>> for Body {
 impl From<Vec<u8>> for Body {
     fn from(data: Vec<u8>) -> Body {
         Body(astra::Body::new(data.to_owned()))
-    }
-}
-
-impl Iterator for Body {
-    type Item = io::Result<Bytes>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.0.next()
-    }
-
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        self.0.size_hint()
-    }
-}
-
-impl fmt::Debug for Body {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", self.0)
-    }
-}
-
-impl Default for Body {
-    fn default() -> Self {
-        Self::empty()
     }
 }
