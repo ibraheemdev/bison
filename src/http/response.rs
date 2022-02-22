@@ -19,29 +19,37 @@ pub struct Response {
 }
 
 impl Response {
+    /// Create a new HTTP response.
     pub fn new() -> Response {
         Response::default()
     }
 
+    /// Create an HTTP response from a responder.
+    ///
+    /// See [`Respond`] for details.
     pub fn from(responder: impl Respond) -> Response {
         responder.respond()
     }
 
+    /// Set the status of this response.
     pub fn status(mut self, status: Status) -> Response {
         self.status = status;
         self
     }
 
+    /// Append a response header.
     pub fn header(mut self, header: impl IntoHeader) -> Response {
         self.headers.append(header);
         self
     }
 
+    /// Set the HTTP version of this response.
     pub fn version(mut self, version: Version) -> Response {
         self.version = version;
         self
     }
 
+    /// Set the response body.
     pub fn body(mut self, body: Body) -> Response {
         self.body = body;
         self
