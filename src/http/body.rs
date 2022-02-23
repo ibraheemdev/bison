@@ -1,4 +1,5 @@
 use crate::bounded::{BoxError, BoxStream, Send, Sync};
+use crate::util::poll_fn;
 
 use std::error::Error as StdError;
 use std::pin::Pin;
@@ -10,14 +11,29 @@ pub use http::{header, Extensions, HeaderValue, Method, StatusCode};
 
 use futures_core::Stream;
 
-/// Respresents the body of an HTTP message.
-pub struct Body { field1: BodyKind }
+/// The body of an HTTP request or response.
+///
+/// Data is streamed, yielding chunks of [`Bytes`].
+///
+/// ```rust
+/// use bison::{Request, Response, Body};
+///
+/// fn handle(mut req: &mut Request) -> Response {
+///     for chunk in req.body.chunk() {
+///         println!("body chunk {:?}", chunk);
+///     }
+///
+///     Response::new(Body::new("Hello World!"))
+/// }
+/// ```
+pub struct Body {
+    kind: BodyKind,
+}
 
 enum BodyKind {
     Stream(BoxStream<'static, Result<Bytes, BoxError>>),
     Once(Bytes),
     Empty,
-    Taken,
 }
 
 impl Body {
@@ -43,82 +59,68 @@ impl Body {
             }
         }
 
-        Body { field1: BodyKind::Stream(Box::pin(MapErr(stream))) }
+        Body {
+            kind: BodyKind::Stream(Box::pin(MapErr(stream))),
+        }
     }
 
     pub fn try_clone(&self) -> Option<Body> {
-        let kind = match self.field1 {
+        let kind = match self.kind {
             BodyKind::Stream(_) => return None,
             BodyKind::Once(ref b) => BodyKind::Once(b.clone()),
             BodyKind::Empty => BodyKind::Empty,
-            BodyKind::Taken => BodyKind::Taken,
         };
 
-        Some(Body { field1: kind })
+        Some(Body { kind })
     }
 
     /// Create a body directly from bytes.
     pub fn once(bytes: impl Into<Bytes>) -> Self {
-        Body { field1: BodyKind::Once(bytes.into()) }
+        Body {
+            kind: BodyKind::Once(bytes.into()),
+        }
     }
 
     /// Create an empty `Body`.
     pub fn empty() -> Self {
-        Body { field1: BodyKind::Empty }
-    }
-
-    pub fn take(&self) -> Option<Body> {
-        match mem::replace(&mut self.field1, BodyKind::Taken) {
-            BodyKind::Taken => None,
-            b => Some(Body { field1: b }),
+        Body {
+            kind: BodyKind::Empty,
         }
     }
 
-    pub async fn chunk(&self) -> Option<Result<Bytes, BoxError>> {
+    pub async fn chunk(&mut self) -> Option<Result<Bytes, BoxError>> {
         let mut this = self;
-        crate::util::poll_fn(|cx| Pin::new(&mut this).poll_next(cx)).await
-    }
-}
-
-impl Stream for &Body {
-    type Item = Result<Bytes, BoxError>;
-
-    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        match &mut self.field1 {
-            BodyKind::Stream(stream) => stream.as_mut().poll_next(cx),
-            BodyKind::Once(bytes) => {
-                let bytes = mem::take(bytes);
-                self.field1 = BodyKind::Empty;
-                Some(Ok(bytes)).into()
-            }
-            BodyKind::Empty | BodyKind::Taken => None.into(),
-        }
-    }
-
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        match &*self.field1.borrow_mut() {
-            BodyKind::Stream(stream) => stream.size_hint(),
-            BodyKind::Once(bytes) => (bytes.len(), Some(bytes.len())),
-            BodyKind::Empty | BodyKind::Taken => (0, Some(0)),
-        }
-    }
-}
-
-impl Stream for Body {
-    type Item = Result<Bytes, BoxError>;
-
-    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        <&Body>::poll_next(Pin::new(&mut &*self), cx)
-    }
-
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        <&Body>::size_hint(&self)
+        poll_fn(|cx| Pin::new(&mut this).poll_next(cx)).await
     }
 }
 
 impl Default for Body {
     fn default() -> Self {
         Self::empty()
+    }
+}
+
+impl Stream for Body {
+    type Item = Result<Bytes, BoxError>;
+
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        match &mut self.kind {
+            BodyKind::Stream(stream) => stream.as_mut().poll_next(cx),
+            BodyKind::Once(bytes) => {
+                let bytes = mem::take(bytes);
+                self.kind = BodyKind::Empty;
+                Some(Ok(bytes)).into()
+            }
+            BodyKind::Empty => None.into(),
+        }
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        match self.kind {
+            BodyKind::Stream(ref stream) => stream.size_hint(),
+            BodyKind::Once(ref bytes) => (bytes.len(), Some(bytes.len())),
+            BodyKind::Empty => (0, Some(0)),
+        }
     }
 }
 

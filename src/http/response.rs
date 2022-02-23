@@ -86,7 +86,7 @@ macro_rules! content {
             fn respond(self) -> Response {
                 Response::new()
                     .header($content_type)
-                    .body(Body::new(self $(.$into())?))
+                    .body(Body::once(self $(.$into())?))
             }
         })*
     }
