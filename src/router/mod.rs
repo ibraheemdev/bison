@@ -29,11 +29,11 @@ impl Router<Call> {
 
 impl<W> Router<W>
 where
-    W: for<'r> Wrap<'r>,
+    W: Wrap,
 {
     pub(crate) fn wrap<O>(self, wrap: O) -> Router<And<W, O>>
     where
-        O: for<'r> Wrap<'r>,
+        O: Wrap,
     {
         Router {
             wrap: self.wrap.wrap(wrap),
@@ -134,9 +134,9 @@ where
 
         req.params = params;
 
-        match self.wrap.call(&mut req, &DynNext(&**handler)).await {
+        match self.wrap.call(req, &DynNext(&**handler)).await {
             Ok(res) => res,
-            Err(err) => err.reject(&req),
+            Err(err) => err.reject(),
         }
     }
 }

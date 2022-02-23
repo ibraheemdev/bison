@@ -45,7 +45,7 @@ impl Bison<Call> {
 
 impl<W> Bison<W>
 where
-    W: for<'r> Wrap<'r>,
+    W: Wrap,
 {
     /// Insert a route for the given method.
     ///
@@ -62,7 +62,7 @@ where
     /// ```
     pub fn route<H>(self, method: Method, path: &str, handler: H) -> Bison<W>
     where
-        H: for<'r> Handler<'r> + 'static,
+        H: Handler + 'static,
     {
         Bison {
             router: self
@@ -88,7 +88,7 @@ where
     /// ```
     pub fn get<H, C>(self, path: &str, handler: H) -> Bison<W>
     where
-        H: for<'r> Handler<'r> + 'static,
+        H: Handler + 'static,
     {
         self.route(Method::Get, path, handler)
     }
@@ -147,7 +147,7 @@ where
     /// Wrap the application with some middleware.
     pub fn wrap<O>(self, wrap: O) -> Bison<And<W, O>>
     where
-        O: for<'r> Wrap<'r>,
+        O: Wrap,
     {
         Bison {
             router: self.router.wrap(wrap),
@@ -159,7 +159,7 @@ where
     pub fn scope<F, O>(self, prefix: &str, f: F) -> Bison<W>
     where
         F: FnOnce(Scope<Call>) -> Scope<O>,
-        O: for<'r> Wrap<'r>,
+        O: Wrap,
     {
         let scope = f(Scope::new(prefix));
         scope.register(self)
@@ -182,7 +182,7 @@ macro_rules! route {
         /// See [`get`](Bison::get) for examples.
         pub fn $name<H>(self, path: &str, handler: H) -> Bison<W>
         where
-            H: for<'r> Handler<'r> + 'static,
+            H: Handler + 'static,
         {
             self.route(Method::$method, path, handler)
         }

@@ -1,4 +1,4 @@
-use crate::http::{Request, Response};
+use crate::http::Response;
 
 use std::convert::Infallible;
 use std::fmt::{self, Debug, Display};
@@ -6,11 +6,11 @@ use std::fmt::{self, Debug, Display};
 /// An error capable rejecting a request with an HTTP error esponse.
 pub trait Reject: Debug + Display {
     /// Reject the request with an HTTP error response.
-    fn reject(self, req: &Request) -> Response;
+    fn reject(self) -> Response;
 }
 
 impl Reject for Infallible {
-    fn reject(self, _: &Request) -> Response {
+    fn reject(self) -> Response {
         unsafe { std::hint::unreachable_unchecked() }
     }
 }
@@ -34,18 +34,18 @@ impl Rejection {
     /// This method is analogous to [`Reject::reject`],
     /// which cannot be implemented directly due to
     /// coherence rules.
-    pub fn reject(self, req: &Request) -> Response {
-        self.inner.reject(req)
+    pub fn reject(self) -> Response {
+        self.inner.reject()
     }
 }
 
 trait BoxedReject: Reject {
-    fn reject(self: Box<Self>, _: &Request) -> Response;
+    fn reject(self: Box<Self>) -> Response;
 }
 
 impl<T: Reject> BoxedReject for T {
-    fn reject(self: Box<Self>, req: &Request) -> Response {
-        Reject::reject(*self, req)
+    fn reject(self: Box<Self>) -> Response {
+        Reject::reject(*self)
     }
 }
 
@@ -116,7 +116,7 @@ impl IntoRejection for Response {
         }
 
         impl Reject for Impl {
-            fn reject(self, _: &Request) -> Response {
+            fn reject(self) -> Response {
                 self.0
             }
         }

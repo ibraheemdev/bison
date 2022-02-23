@@ -31,7 +31,7 @@ impl Scope<Call> {
 
 impl<W> Scope<W>
 where
-    W: for<'r> Wrap<'r>,
+    W: Wrap,
 {
     /// Insert a route for the given method.
     ///
@@ -52,7 +52,7 @@ where
     /// ```
     pub fn route<H>(mut self, method: Method, path: &str, handler: H) -> Scope<W>
     where
-        H: for<'r> Handler<'r> + 'static,
+        H: Handler + 'static,
     {
         // avoid registering "//foo"
         let path = if self.prefix == "/" && !path.is_empty() {
@@ -86,7 +86,7 @@ where
     /// ```
     pub fn get<H, C>(self, path: &str, handler: H) -> Scope<W>
     where
-        H: for<'r> Handler<'r> + 'static,
+        H: Handler + 'static,
     {
         self.route(Method::Get, path, handler)
     }
@@ -94,7 +94,7 @@ where
     /// Wrap the scope with some middleware.
     pub fn wrap<O>(self, wrap: O) -> Scope<And<W, O>>
     where
-        O: for<'r> Wrap<'r>,
+        O: Wrap,
     {
         Scope {
             wrap: self.wrap.wrap(wrap),
@@ -112,7 +112,7 @@ where
 
     pub(crate) fn register<O>(self, mut bison: Bison<O>) -> Bison<O>
     where
-        O: for<'r> Wrap<'r>,
+        O: Wrap,
     {
         let wrap = Rc::new(self.wrap);
 
@@ -137,9 +137,9 @@ macro_rules! route {
     ($name:ident => $method:ident) => {
         #[doc = concat!("Insert a route for the `", stringify!($method), "` method.")]
         /// See [`get`](Scope::get) for examples.
-        pub fn $name<H>(mut self, path: &str, handler: H) -> Scope<W>
+        pub fn $name<H>(self, path: &str, handler: H) -> Scope<W>
         where
-            H: for<'r> Handler<'r> + 'static,
+            H: Handler + 'static,
         {
             self.route(Method::$method, path, handler)
         }

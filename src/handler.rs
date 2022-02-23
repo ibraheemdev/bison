@@ -5,15 +5,15 @@ use std::future::Future;
 
 /// An asynchronous HTTP handler.
 #[async_trait::async_trait]
-pub trait Handler<'r>: Send + Sync {
+pub trait Handler: Send + Sync {
     /// Call this handler with the given request.
-    async fn call(&self, req: &'r mut Request) -> Result;
+    async fn call(&self, req: Request) -> Result;
 
     /// Wrap this handler in some middleware.
     fn wrap<W>(self, wrap: W) -> Wrapped<Self, W>
     where
         Self: Sized,
-        W: Wrap<'r>,
+        W: Wrap,
     {
         Wrapped {
             handler: self,
@@ -23,12 +23,11 @@ pub trait Handler<'r>: Send + Sync {
 }
 
 /// A type-erased [`Handler`].
-pub type BoxHandler = Box<dyn for<'r> Handler<'r>>;
+pub type BoxHandler = Box<dyn Handler>;
 
-impl<'r> Handler<'r> for BoxHandler {
-    fn call<'a, 'o>(&'a self, req: &'r mut Request) -> BoxFuture<'o, Result>
+impl Handler for BoxHandler {
+    fn call<'a, 'o>(&'a self, req: Request) -> BoxFuture<'o, Result>
     where
-        'r: 'o,
         'a: 'o,
     {
         Handler::call(&**self, req)
@@ -36,11 +35,12 @@ impl<'r> Handler<'r> for BoxHandler {
 }
 
 #[async_trait::async_trait]
-impl<'r, Fut> Handler<'r> for fn(&'r mut Request) -> Fut
+impl<F, Fut> Handler for F
 where
+    F: Fn(Request) -> Fut + Send + Sync,
     Fut: Future<Output = Result> + Send + Sync,
 {
-    async fn call(&self, req: &'r mut Request) -> Result {
+    async fn call(&self, req: Request) -> Result {
         self(req).await
     }
 }
@@ -53,14 +53,13 @@ pub struct Wrapped<H, W> {
     wrap: W,
 }
 
-impl<'r, H, W> Handler<'r> for Wrapped<H, W>
+impl<H, W> Handler for Wrapped<H, W>
 where
-    H: Handler<'r>,
-    W: Wrap<'r>,
+    H: Handler,
+    W: Wrap,
 {
-    fn call<'a, 'o>(&'a self, req: &'r mut Request) -> BoxFuture<'o, Result>
+    fn call<'a, 'o>(&'a self, req: Request) -> BoxFuture<'o, Result>
     where
-        'r: 'o,
         'a: 'o,
     {
         self.wrap.call(req, &self.handler)

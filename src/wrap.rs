@@ -3,10 +3,10 @@ use crate::{Handler, Request, Result};
 
 /// Asynchronous HTTP middleware.
 #[async_trait::async_trait]
-pub trait Wrap<'r>: Send + Sync + 'static {
+pub trait Wrap: Send + Sync + 'static {
     /// Call the middleware with a request, and the next
     /// handler in the chain.nd a handler.
-    async fn call(&self, req: &'r mut Request, next: &impl Next<'r>) -> Result;
+    async fn call(&self, req: Request, next: &impl Next) -> Result;
 
     /// Add another middleware to the chain.
     ///
@@ -14,7 +14,7 @@ pub trait Wrap<'r>: Send + Sync + 'static {
     /// the given middleware as the next parameter.
     fn wrap<W>(self, wrap: W) -> And<Self, W>
     where
-        W: Wrap<'r>,
+        W: Wrap,
         Self: Sized,
     {
         And {
@@ -24,17 +24,12 @@ pub trait Wrap<'r>: Send + Sync + 'static {
     }
 }
 
-impl<'r, W> Wrap<'r> for Rc<W>
+impl<W> Wrap for Rc<W>
 where
-    W: Wrap<'r>,
+    W: Wrap,
 {
-    fn call<'a, 'b, 'o>(
-        &'a self,
-        req: &'r mut Request,
-        next: &'b impl Next<'r>,
-    ) -> BoxFuture<'o, Result>
+    fn call<'a, 'b, 'o>(&'a self, req: Request, next: &'b impl Next) -> BoxFuture<'o, Result>
     where
-        'r: 'o,
         'a: 'o,
         'b: 'o,
     {
@@ -44,18 +39,17 @@ where
 
 /// The next middleware in the chain.
 #[async_trait::async_trait]
-pub trait Next<'r>: Send + Sync {
+pub trait Next: Send + Sync {
     /// Call this middleware with the given request.
-    async fn call(&self, req: &'r mut Request) -> Result;
+    async fn call(&self, req: Request) -> Result;
 }
 
-impl<'r, H> Next<'r> for H
+impl<H> Next for H
 where
-    H: Handler<'r>,
+    H: Handler,
 {
-    fn call<'a, 'o>(&'a self, req: &'r mut Request) -> BoxFuture<'o, Result>
+    fn call<'a, 'o>(&'a self, req: Request) -> BoxFuture<'o, Result>
     where
-        'r: 'o,
         'a: 'o,
     {
         Handler::call(self, req)
@@ -71,12 +65,12 @@ pub struct And<I, O> {
 }
 
 #[async_trait::async_trait]
-impl<'r, I, O> Wrap<'r> for And<I, O>
+impl<I, O> Wrap for And<I, O>
 where
-    I: Wrap<'r>,
-    O: Wrap<'r>,
+    I: Wrap,
+    O: Wrap,
 {
-    async fn call(&self, req: &'r mut Request, next: &impl Next<'r>) -> Result {
+    async fn call(&self, req: Request, next: &impl Next) -> Result {
         self.outer
             .call(
                 req,
@@ -89,15 +83,14 @@ where
     }
 }
 
-impl<'r, I, O> Next<'r> for And<&I, &O>
+impl<I, O> Next for And<&I, &O>
 where
-    I: Next<'r>,
-    O: Wrap<'r>,
+    I: Next,
+    O: Wrap,
 {
-    fn call<'a, 'o>(&'a self, req: &'r mut Request) -> BoxFuture<'o, Result>
+    fn call<'a, 'o>(&'a self, req: Request) -> BoxFuture<'o, Result>
     where
         'a: 'o,
-        'r: 'o,
     {
         self.outer.call(req, self.inner)
     }
@@ -109,19 +102,18 @@ where
 pub struct Call;
 
 #[async_trait::async_trait]
-impl<'r> Wrap<'r> for Call {
-    async fn call(&self, req: &'r mut Request, next: &impl Next<'r>) -> Result {
+impl Wrap for Call {
+    async fn call(&self, req: Request, next: &impl Next) -> Result {
         next.call(req).await
     }
 }
 
-pub(crate) struct DynNext<'h>(pub &'h dyn for<'r> Handler<'r>);
+pub(crate) struct DynNext<'h>(pub &'h dyn Handler);
 
-impl<'h, 'r> Next<'r> for DynNext<'h> {
-    fn call<'a, 'o>(&'a self, req: &'r mut Request) -> BoxFuture<'o, Result>
+impl<'h> Next for DynNext<'h> {
+    fn call<'a, 'o>(&'a self, req: Request) -> BoxFuture<'o, Result>
     where
         'a: 'o,
-        'r: 'o,
     {
         Handler::call(self.0, req)
     }

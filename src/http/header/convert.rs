@@ -1,4 +1,4 @@
-use crate::http::{ByteStr, Headers, Request, Response, Status};
+use crate::http::{ByteStr, Headers, Response, Status};
 use crate::reject::Reject;
 
 use std::{fmt, iter};
@@ -52,7 +52,7 @@ impl fmt::Display for MissingHeader {
 }
 
 impl Reject for MissingHeader {
-    fn reject(self, _: &Request) -> Response {
+    fn reject(self) -> Response {
         Response::from(Status::BadRequest)
     }
 }
