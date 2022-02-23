@@ -27,13 +27,13 @@ where
     }
 }
 
-/// An HTTP header that can be extracted from a header map.
-pub trait FromHeaders<'a>: Sized {
+/// A typed HTTP header.
+pub trait Header<'a>: Sized {
     /// Error that can occur when extracting this header.
     type Rejection: Reject;
 
-    /// Extracts the header from the map.
-    fn from_headers(headers: &Headers) -> Result<Self, Self::Rejection>;
+    /// Extracts the header from the header map.
+    fn extract(headers: &Headers) -> Result<Self, Self::Rejection>;
 }
 
 /// The rejection returned when an expected header

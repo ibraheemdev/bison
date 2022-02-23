@@ -10,9 +10,9 @@ readme = "README.md"
 
 [dependencies]
 matchit = "0.4.2"
-astra = "0.1.1"
 http = "0.2.6"
 bytes = "1.1.0"
 mime = "0.3.16"
+futures-core = "0.3.21"
 
 [dev-dependencies]

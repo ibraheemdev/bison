@@ -6,4 +6,4 @@ mod common;
 pub use common::ContentType;
 
 mod convert;
-pub use convert::{FromHeader, IntoHeader};
+pub use convert::{Header, IntoHeader};

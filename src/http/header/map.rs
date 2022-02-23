@@ -21,7 +21,7 @@ impl Headers {
 
     /// Returns `true` if a header exists with the given name.
     pub fn contains(&self, name: &str) -> bool {
-        self.map.contains_key(name)
+        self.map.contains_key(CaseInsensitiveStr::new(name))
     }
 
     /// The number of headers in this map.
@@ -38,7 +38,7 @@ impl Headers {
     /// the given name.
     pub fn get<'a>(&'a self, name: &str) -> Values<'_> {
         self.map
-            .get(name)
+            .get(CaseInsensitiveStr::new(name))
             .map(|values| values.iter())
             .unwrap_or(Values {
                 kind: ValuesKind::None,
@@ -102,7 +102,7 @@ impl Headers {
     pub fn remove(&mut self, name: &str) -> Removed {
         let kind = self
             .map
-            .remove(name)
+            .remove(CaseInsensitiveStr::new(name))
             .map(|value| match value {
                 HeaderValue::One(value) => RemovedKind::One(iter::once(value)),
                 HeaderValue::Many(values) => RemovedKind::Many(values.into_iter()),
@@ -256,17 +256,59 @@ impl fmt::Debug for HeaderValue {
     }
 }
 
-use case_insensitive::CaseInsensitive;
+use case_insensitive::{CaseInsensitive, CaseInsensitiveStr};
 
 mod case_insensitive {
     use super::*;
 
-    use std::{
-        borrow::Borrow,
-        hash::{Hash, Hasher},
-    };
+    use std::borrow::Borrow;
+    use std::hash::{Hash, Hasher};
+
+    #[repr(transparent)]
+    pub(super) struct CaseInsensitiveStr(str);
+
+    impl CaseInsensitiveStr {
+        pub(super) fn new(str: &str) -> &CaseInsensitiveStr {
+            // SAFETY: repr(transparent)
+            unsafe { &*(str as *const _ as *const _) }
+        }
+    }
+
+    impl PartialEq for CaseInsensitiveStr {
+        fn eq(&self, other: &CaseInsensitiveStr) -> bool {
+            self.0.eq_ignore_ascii_case(&other.0)
+        }
+    }
+
+    impl Eq for CaseInsensitiveStr {}
+
+    impl Hash for CaseInsensitiveStr {
+        fn hash<H: Hasher>(&self, hasher: &mut H) {
+            for byte in self.0.bytes() {
+                hasher.write_u8(byte.to_ascii_lowercase());
+            }
+        }
+    }
+
+    impl fmt::Debug for CaseInsensitiveStr {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            write!(f, "{:?}", &self.0)
+        }
+    }
+
+    impl fmt::Display for CaseInsensitiveStr {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            write!(f, "{}", &self.0)
+        }
+    }
 
     pub(super) struct CaseInsensitive(pub(super) ByteStr);
+
+    impl Borrow<CaseInsensitiveStr> for CaseInsensitive {
+        fn borrow(&self) -> &CaseInsensitiveStr {
+            CaseInsensitiveStr::new(&self.0)
+        }
+    }
 
     impl PartialEq for CaseInsensitive {
         fn eq(&self, other: &CaseInsensitive) -> bool {
@@ -275,12 +317,6 @@ mod case_insensitive {
     }
 
     impl Eq for CaseInsensitive {}
-
-    impl Borrow<str> for CaseInsensitive {
-        fn borrow(&self) -> &str {
-            self.0.as_str()
-        }
-    }
 
     impl Hash for CaseInsensitive {
         fn hash<H: Hasher>(&self, hasher: &mut H) {
@@ -292,13 +328,13 @@ mod case_insensitive {
 
     impl fmt::Debug for CaseInsensitive {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            write!(f, "{:?}", self.0)
+            write!(f, "{:?}", &self.0)
         }
     }
 
     impl fmt::Display for CaseInsensitive {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            write!(f, "{}", self.0)
+            write!(f, "{}", &self.0)
         }
     }
 }
