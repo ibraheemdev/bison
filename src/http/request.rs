@@ -1,5 +1,7 @@
 use super::{Body, Headers, Method, Uri, Version};
+use crate::state::AppState;
 
+#[derive(Default)]
 pub struct Request {
     /// The request's method
     pub method: Method,
@@ -18,4 +20,7 @@ pub struct Request {
 
     // Route Parameters
     pub(crate) params: Vec<(String, String)>,
+
+    // Application state
+    pub(crate) state: Option<AppState>,
 }

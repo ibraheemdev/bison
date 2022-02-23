@@ -1,13 +1,8 @@
 use crate::handler::Handler;
 use crate::http::{Method, Request, Response};
 use crate::router::{Router, Scope};
+use crate::state::{self, State};
 use crate::wrap::{And, Call, Wrap};
-
-mod state {
-    pub struct AppState;
-}
-
-pub trait State {}
 
 /// Where everything happens.
 ///
@@ -43,7 +38,7 @@ impl Bison<Call> {
     pub fn new() -> Bison<Call> {
         Self {
             router: Router::new(),
-            state: state::AppState,
+            state: state::AppState::new(),
         }
     }
 }
@@ -175,7 +170,8 @@ where
     /// Most users will not interact with this method directly,
     /// and instead use a server crate such as [`bison_hyper`]
     /// or [`bison_actix`].
-    pub async fn serve_one(&self, req: Request) -> Response {
+    pub async fn serve_one(&self, mut req: Request) -> Response {
+        req.state = Some(self.state.clone());
         self.router.serve(req).await
     }
 }

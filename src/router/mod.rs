@@ -4,7 +4,7 @@ pub use scope::Scope;
 use crate::handler::BoxHandler;
 use crate::http::{ByteStr, Method, Request, Response, Status};
 use crate::wrap::{And, Call, DynNext};
-use crate::{Handler, Wrap};
+use crate::Wrap;
 
 use std::collections::HashMap;
 
