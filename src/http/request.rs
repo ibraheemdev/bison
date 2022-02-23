@@ -15,4 +15,7 @@ pub struct Request {
 
     /// The request body.
     pub body: Body,
+
+    // Route Parameters
+    pub(crate) params: Vec<(String, String)>,
 }

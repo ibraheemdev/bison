@@ -14,3 +14,5 @@ pub type BoxStream<'a, T> = Pin<Box<dyn Stream<Item = T> + Send + Sync + 'a>>;
 
 /// An dynamically typed [`Error`].
 pub type BoxError = Box<dyn Error + Send + Sync>;
+
+pub use std::sync::Arc as Rc;

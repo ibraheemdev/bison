@@ -1,22 +1,20 @@
-pub mod http;
-pub use self::http::{Request, Response};
-
-pub mod reject;
-pub use reject::{Reject, Rejection};
+#![deny(rust_2018_idioms)]
 
 pub mod bounded;
-
-mod util;
+pub mod http;
+pub mod reject;
+pub mod wrap;
 
 mod bison;
-pub use bison::Bison;
-
+mod handler;
 mod router;
+mod util;
 
-mod wrap;
+pub use self::http::{Request, Response};
+pub use bison::Bison;
+pub use handler::Handler;
+pub use router::Scope;
+pub use reject::{Reject, Rejection};
 pub use wrap::Wrap;
 
 pub type Result<T = Response> = std::result::Result<T, Rejection>;
-
-mod handler;
-pub use handler::Handler;

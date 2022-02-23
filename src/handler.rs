@@ -5,15 +5,15 @@ use std::future::Future;
 
 /// An asynchronous HTTP handler.
 #[async_trait::async_trait]
-pub trait Handler<'req>: Send + Sync {
+pub trait Handler<'r>: Send + Sync {
     /// Call this handler with the given request.
-    async fn call(&self, req: &'req mut Request) -> Result;
+    async fn call(&self, req: &'r mut Request) -> Result;
 
     /// Wrap this handler in some middleware.
     fn wrap<W>(self, wrap: W) -> Wrapped<Self, W>
     where
         Self: Sized,
-        W: Wrap<'req>,
+        W: Wrap<'r>,
     {
         Wrapped {
             handler: self,
@@ -22,13 +22,25 @@ pub trait Handler<'req>: Send + Sync {
     }
 }
 
+/// A type-erased [`Handler`].
+pub type BoxHandler = Box<dyn for<'r> Handler<'r>>;
+
+impl<'r> Handler<'r> for BoxHandler {
+    fn call<'a, 'o>(&'a self, req: &'r mut Request) -> BoxFuture<'o, Result>
+    where
+        'r: 'o,
+        'a: 'o,
+    {
+        Handler::call(&**self, req)
+    }
+}
+
 #[async_trait::async_trait]
-impl<'req, F, Fut> Handler<'req> for F
+impl<'r, Fut> Handler<'r> for fn(&'r mut Request) -> Fut
 where
-    F: Fn(&'req mut Request) -> Fut + Send + Sync,
     Fut: Future<Output = Result> + Send + Sync,
 {
-    async fn call(&self, req: &'req mut Request) -> Result {
+    async fn call(&self, req: &'r mut Request) -> Result {
         self(req).await
     }
 }
@@ -41,30 +53,16 @@ pub struct Wrapped<H, W> {
     wrap: W,
 }
 
-#[async_trait::async_trait]
-impl<'req, H, W> Handler<'req> for Wrapped<H, W>
+impl<'r, H, W> Handler<'r> for Wrapped<H, W>
 where
-    H: Handler<'req>,
-    W: Wrap<'req>,
+    H: Handler<'r>,
+    W: Wrap<'r>,
 {
-    async fn call(&self, req: &'req mut Request) -> Result {
-        self.wrap.wrap(req, HandlerRef(&self.handler)).await
-    }
-}
-
-/// A reference to a handler.
-pub struct HandlerRef<'h, H>(pub &'h H);
-
-impl<'h, 'req, H> Handler<'req> for HandlerRef<'h, H>
-where
-    H: Handler<'req>,
-{
-    fn call<'a, 'o>(&self, req: &'req mut Request) -> BoxFuture<'o, Result>
+    fn call<'a, 'o>(&'a self, req: &'r mut Request) -> BoxFuture<'o, Result>
     where
+        'r: 'o,
         'a: 'o,
-        'h: 'o,
-        'req: 'o,
     {
-        self.0.call(req)
+        self.wrap.call(req, &self.handler)
     }
 }
