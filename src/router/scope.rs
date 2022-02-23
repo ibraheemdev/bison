@@ -50,9 +50,10 @@ where
     /// });
     /// # mod users { use bison::*; pub fn get(req: &Request) -> Response { todo!() } }
     /// ```
-    pub fn route<H>(mut self, method: Method, path: &str, handler: H) -> Scope<W>
+    pub fn route<H, S>(mut self, method: Method, path: &str, handler: H) -> Scope<W>
     where
-        H: Handler + 'static,
+        H: Handler<S> + 'static,
+        S: Send + Sync + 'static,
     {
         // avoid registering "//foo"
         let path = if self.prefix == "/" && !path.is_empty() {
@@ -61,7 +62,7 @@ where
             path.to_owned()
         };
 
-        self.routes.push((method, path, Box::new(handler)));
+        self.routes.push((method, path, handler.boxed()));
         self
     }
 
@@ -84,9 +85,10 @@ where
     /// # mod posts { pub use f as get; }
     /// # mod admin { pub use f as dashboard; }
     /// ```
-    pub fn get<H, C>(self, path: &str, handler: H) -> Scope<W>
+    pub fn get<H, S>(self, path: &str, handler: H) -> Scope<W>
     where
-        H: Handler + 'static,
+        H: Handler<S> + 'static,
+        S: Send + Sync + 'static,
     {
         self.route(Method::Get, path, handler)
     }
@@ -137,9 +139,10 @@ macro_rules! route {
     ($name:ident => $method:ident) => {
         #[doc = concat!("Insert a route for the `", stringify!($method), "` method.")]
         /// See [`get`](Scope::get) for examples.
-        pub fn $name<H>(self, path: &str, handler: H) -> Scope<W>
+        pub fn $name<H, S>(self, path: &str, handler: H) -> Scope<W>
         where
-            H: Handler + 'static,
+            H: Handler<S> + 'static,
+            S: Send + Sync + 'static,
         {
             self.route(Method::$method, path, handler)
         }

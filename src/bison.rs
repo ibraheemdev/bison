@@ -60,14 +60,15 @@ where
     ///
     /// let bison = Bison::new().route(Method::Get, "/", home);
     /// ```
-    pub fn route<H>(self, method: Method, path: &str, handler: H) -> Bison<W>
+    pub fn route<H, S>(self, method: Method, path: &str, handler: H) -> Bison<W>
     where
-        H: Handler + 'static,
+        H: Handler<S> + 'static,
+        S: Send + Sync + 'static,
     {
         Bison {
             router: self
                 .router
-                .route(method, path, Box::new(handler))
+                .route(method, path, handler.boxed())
                 .expect("failed to insert route"),
             state: self.state,
         }
@@ -86,9 +87,10 @@ where
     ///
     /// let bison = Bison::new().get("/", home);
     /// ```
-    pub fn get<H, C>(self, path: &str, handler: H) -> Bison<W>
+    pub fn get<H, S>(self, path: &str, handler: H) -> Bison<W>
     where
-        H: Handler + 'static,
+        H: Handler<S> + 'static,
+        S: Send + Sync + 'static,
     {
         self.route(Method::Get, path, handler)
     }
@@ -180,9 +182,10 @@ macro_rules! route {
     ($name:ident => $method:ident) => {
         #[doc = concat!("Insert a route for the `", stringify!($method), "` method.")]
         /// See [`get`](Bison::get) for examples.
-        pub fn $name<H>(self, path: &str, handler: H) -> Bison<W>
+        pub fn $name<H, S>(self, path: &str, handler: H) -> Bison<W>
         where
-            H: Handler + 'static,
+            H: Handler<S> + 'static,
+            S: Send + Sync + 'static,
         {
             self.route(Method::$method, path, handler)
         }

@@ -44,18 +44,6 @@ pub trait Next: Send + Sync {
     async fn call(&self, req: Request) -> Result;
 }
 
-impl<H> Next for H
-where
-    H: Handler,
-{
-    fn call<'a, 'o>(&'a self, req: Request) -> BoxFuture<'o, Result>
-    where
-        'a: 'o,
-    {
-        Handler::call(self, req)
-    }
-}
-
 /// A combination of two middlewares.
 ///
 /// See [`Wrap::wrap`] for details.
