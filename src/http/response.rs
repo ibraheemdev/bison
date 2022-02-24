@@ -57,7 +57,7 @@ impl Response {
 }
 
 /// A type that can be converted into an HTTP response.
-pub trait Respond {
+pub trait Respond: Sized {
     /// Convert into an HTTP response.
     fn respond(self) -> Response;
 }
@@ -83,7 +83,7 @@ impl Respond for Status {
 macro_rules! content {
     ($($ty:ty $(|> $into:ident)? => $content_type:expr),* $(,)?) => { $(
         impl Respond for $ty {
-            fn respond(self) -> Response {
+            fn respond_ok(self) -> Response {
                 Response::new()
                     .header($content_type)
                     .body(Body::once(self $(.$into())?))

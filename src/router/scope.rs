@@ -2,7 +2,7 @@ use crate::bounded::Rc;
 use crate::handler::{BoxHandler, Handler};
 use crate::http::Method;
 use crate::wrap::{And, Call, Wrap};
-use crate::Bison;
+use crate::{Bison, State};
 
 /// Routes scoped under a common prefix.
 ///
@@ -53,7 +53,7 @@ where
     pub fn route<H, S>(mut self, method: Method, path: &str, handler: H) -> Scope<W>
     where
         H: Handler<S> + 'static,
-        S: Send + Sync + 'static,
+        S: State,
     {
         // avoid registering "//foo"
         let path = if self.prefix == "/" && !path.is_empty() {
@@ -88,7 +88,7 @@ where
     pub fn get<H, S>(self, path: &str, handler: H) -> Scope<W>
     where
         H: Handler<S> + 'static,
-        S: Send + Sync + 'static,
+        S: State,
     {
         self.route(Method::Get, path, handler)
     }
@@ -142,7 +142,7 @@ macro_rules! route {
         pub fn $name<H, S>(self, path: &str, handler: H) -> Scope<W>
         where
             H: Handler<S> + 'static,
-            S: Send + Sync + 'static,
+            S: State,
         {
             self.route(Method::$method, path, handler)
         }

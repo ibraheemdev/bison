@@ -1,4 +1,5 @@
-use crate::http::Response;
+use crate::http::{Response, Status};
+use crate::Respond;
 
 use std::convert::Infallible;
 use std::fmt::{self, Debug, Display};
@@ -7,6 +8,12 @@ use std::fmt::{self, Debug, Display};
 pub trait Reject: Debug + Display {
     /// Reject the request with an HTTP error response.
     fn reject(self) -> Response;
+}
+
+impl Reject for Status {
+    fn reject(self) -> Response {
+        self.respond()
+    }
 }
 
 impl Reject for Infallible {

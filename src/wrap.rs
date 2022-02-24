@@ -1,3 +1,5 @@
+use std::marker::PhantomData;
+
 use crate::bounded::{BoxFuture, Rc, Send};
 use crate::{Handler, Request, Result};
 
@@ -89,10 +91,13 @@ where
 /// This is useful in generic code as a base middleware type.
 pub struct Call;
 
-#[async_trait::async_trait]
 impl Wrap for Call {
-    async fn call(&self, req: Request, next: &impl Next) -> Result {
-        next.call(req).await
+    fn call<'a, 'b, 'o>(&'a self, req: Request, next: &'b impl Next) -> BoxFuture<'o, Result>
+    where
+        'a: 'o,
+        'b: 'o,
+    {
+        next.call(req)
     }
 }
 
@@ -104,5 +109,20 @@ impl<'h> Next for DynNext<'h> {
         'a: 'o,
     {
         Handler::call(self.0, req)
+    }
+}
+
+pub(crate) struct HandlerNext<H, S>(pub H, pub PhantomData<S>);
+
+impl<H, S> Next for HandlerNext<H, S>
+where
+    H: Handler<S>,
+    S: Send + Sync + 'static,
+{
+    fn call<'a, 'o>(&'a self, req: Request) -> BoxFuture<'o, Result>
+    where
+        'a: 'o,
+    {
+        Handler::call(&self.0, req)
     }
 }

@@ -63,7 +63,7 @@ where
     pub fn route<H, S>(self, method: Method, path: &str, handler: H) -> Bison<W>
     where
         H: Handler<S> + 'static,
-        S: Send + Sync + 'static,
+        S: State,
     {
         Bison {
             router: self
@@ -90,7 +90,7 @@ where
     pub fn get<H, S>(self, path: &str, handler: H) -> Bison<W>
     where
         H: Handler<S> + 'static,
-        S: Send + Sync + 'static,
+        S: State,
     {
         self.route(Method::Get, path, handler)
     }
@@ -185,7 +185,7 @@ macro_rules! route {
         pub fn $name<H, S>(self, path: &str, handler: H) -> Bison<W>
         where
             H: Handler<S> + 'static,
-            S: Send + Sync + 'static,
+            S: State,
         {
             self.route(Method::$method, path, handler)
         }

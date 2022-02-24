@@ -11,7 +11,7 @@ mod router;
 mod state;
 mod util;
 
-pub use self::http::{Request, Response};
+pub use self::http::{Request, Respond, Response};
 pub use bison::Bison;
 pub use handler::Handler;
 pub use reject::{Reject, Rejection};
