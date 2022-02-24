@@ -41,9 +41,8 @@ parse_params! {
 
 /// Error returned by [`Request::param`].
 ///
-/// When used as a rejection, this type will
-/// return [`Status::NotFound`] if the parameter
-/// was not found, and [`Status::BadRequest`] if
+/// This type will reject the request with [`Status::NotFound`]
+/// if the parameter was not found, and [`Status::BadRequest`] if
 /// parsing failed.
 #[derive(Debug)]
 pub struct ParamRejection {

@@ -1,25 +1,17 @@
 use crate::http::{Response, Status};
 use crate::Respond;
 
+use std::char::ParseCharError;
 use std::convert::Infallible;
 use std::fmt::{self, Debug, Display};
+use std::net::AddrParseError;
+use std::num::{ParseFloatError, ParseIntError};
+use std::str::ParseBoolError;
 
 /// An error capable rejecting a request with an HTTP error esponse.
 pub trait Reject: Debug + Display {
     /// Reject the request with an HTTP error response.
     fn reject(self) -> Response;
-}
-
-impl Reject for Status {
-    fn reject(self) -> Response {
-        self.respond()
-    }
-}
-
-impl Reject for Infallible {
-    fn reject(self) -> Response {
-        unsafe { std::hint::unreachable_unchecked() }
-    }
 }
 
 /// A dynamically typed rejection.
@@ -130,4 +122,30 @@ impl IntoRejection for Response {
 
         Impl(self).into()
     }
+}
+
+impl Reject for Status {
+    fn reject(self) -> Response {
+        self.respond()
+    }
+}
+
+impl Reject for Infallible {
+    fn reject(self) -> Response {
+        unsafe { std::hint::unreachable_unchecked() }
+    }
+}
+
+macro_rules! bad_request {
+    ($($T:ty),*) => {$(
+        impl Reject for $T {
+            fn reject(self) -> Response {
+                Status::BadRequest.respond()
+            }
+        }
+    )*}
+}
+
+bad_request! {
+    ParseIntError, ParseCharError, ParseBoolError, ParseFloatError, AddrParseError
 }

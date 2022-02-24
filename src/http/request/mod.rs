@@ -1,6 +1,8 @@
 mod param;
 pub use param::{FromParam, ParamRejection};
 
+mod body;
+
 use super::{Body, ByteStr, Headers, Method, Uri, Version};
 use crate::state::AppState;
 
