@@ -6,7 +6,10 @@ use crate::{Reject, Respond, Response};
 use std::fmt;
 
 impl Request {
-    pub fn param<'r, P>(&'r self, keys: P::Keys) -> Result<P, P::Err>
+    /// Extract route parameters.
+    ///
+    /// # Examples
+    pub fn param<'r, P>(&'r self, keys: P::Keys) -> Result<P, ParamRejection>
     where
         P: FromParam<'r>,
     {
@@ -14,11 +17,18 @@ impl Request {
     }
 }
 
+/// Types that can be parsed from route parameters.
+///
+/// This trait is implemented for types that implement
+/// [`FromByteStr`], as well as tuples.
+///
+/// See [`Request::param`] for details.
 pub trait FromParam<'a>: Sized {
+    /// The keys (names) of the parameters being extracted.
     type Keys;
-    type Err: Reject;
 
-    fn get(keys: Self::Keys, params: &'a [(ByteStr, ByteStr)]) -> Result<Self, Self::Err>;
+    /// Parse this type out of the route parameters.
+    fn get(keys: Self::Keys, params: &'a [(ByteStr, ByteStr)]) -> Result<Self, ParamRejection>;
 }
 
 parse_params! {
@@ -29,7 +39,12 @@ parse_params! {
     ((A, B), (C, D), (E, F), (G, H), (I, J)),
 }
 
-/// Error returned by ``.
+/// Error returned by [`Request::param`].
+///
+/// When used as a rejection, this type will
+/// return [`Status::NotFound`] if the parameter
+/// was not found, and [`Status::BadRequest`] if
+/// parsing failed.
 #[derive(Debug)]
 pub struct ParamRejection {
     name: String,
@@ -81,9 +96,8 @@ macro_rules! parse_params {
             ),*
         {
             type Keys = ($( $(@$k:tt)? &'a str),*);
-            type Err = ParamRejection;
 
-            fn get(keys: Self::Keys, params: &'a [(ByteStr, ByteStr)]) -> Result<($($V),*), Self::Err> {
+            fn get(keys: Self::Keys, params: &'a [(ByteStr, ByteStr)]) -> Result<($($V),*), ParamRejection> {
                 let ($($K),*) = keys;
 
                 Ok(($({
