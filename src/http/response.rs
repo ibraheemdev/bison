@@ -83,7 +83,7 @@ impl Respond for Status {
 macro_rules! content {
     ($($ty:ty $(|> $into:ident)? => $content_type:expr),* $(,)?) => { $(
         impl Respond for $ty {
-            fn respond_ok(self) -> Response {
+            fn respond(self) -> Response {
                 Response::new()
                     .header($content_type)
                     .body(Body::once(self $(.$into())?))

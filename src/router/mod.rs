@@ -129,7 +129,7 @@ where
         let params = matched
             .params
             .iter()
-            .map(|(k, v)| (k.to_owned(), v.to_owned()))
+            .map(|(k, v)| (k.into(), v.into()))
             .collect::<Vec<_>>();
 
         req.params = params;

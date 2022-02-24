@@ -1,7 +1,11 @@
 use super::Bytes;
 
 use std::borrow::Borrow;
+use std::convert::Infallible;
+use std::error::Error;
 use std::fmt;
+use std::net::*;
+use std::num::*;
 
 /// A UTF-8 encoded string stored as [`Bytes`].
 #[derive(Clone, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -81,3 +85,62 @@ impl From<&str> for ByteStr {
         ByteStr(str.to_owned().into())
     }
 }
+
+/// Parse a value from a [`ByteStr`].
+///
+/// This trait is automatically implemented for common types
+/// such as integers and bools, as well as `&str` and `ByteStr`
+/// itself.
+pub trait FromByteStr<'a>: Sized {
+    /// The associated error which can be returned from parsing.
+    type Err: Error;
+
+    /// Parses a string `s` to return a value of this type.
+    fn from_byte_str(s: &'a ByteStr) -> Result<Self, Self::Err>;
+}
+
+impl<'a> FromByteStr<'a> for ByteStr {
+    type Err = Infallible;
+
+    fn from_byte_str(s: &'a ByteStr) -> Result<Self, Self::Err> {
+        Ok(s.clone())
+    }
+}
+
+impl<'a> FromByteStr<'a> for &'a ByteStr {
+    type Err = Infallible;
+
+    fn from_byte_str(s: &'a ByteStr) -> Result<Self, Self::Err> {
+        Ok(s)
+    }
+}
+
+impl<'a> FromByteStr<'a> for &'a str {
+    type Err = Infallible;
+
+    fn from_byte_str(s: &'a ByteStr) -> Result<Self, Self::Err> {
+        Ok(s)
+    }
+}
+
+parse! {
+    i8, i16, i32, i64, i128, isize, u8, u16, u32, u64, u128, usize, f32, f64,
+    NonZeroI8, NonZeroI16, NonZeroI32, NonZeroI64, NonZeroI128, NonZeroIsize,
+    NonZeroU8, NonZeroU16, NonZeroU32, NonZeroU64, NonZeroU128, NonZeroUsize,
+    IpAddr, Ipv4Addr, Ipv6Addr, SocketAddrV4, SocketAddrV6, SocketAddr, bool
+}
+
+macro_rules! parse {
+    ($($T:ty),+) => ($(
+        impl<'a> FromByteStr<'a> for $T {
+            type Err = <$T as std::str::FromStr>::Err;
+
+            #[inline]
+            fn from_byte_str(s: &'a ByteStr) -> Result<Self, Self::Err> {
+                s.parse()
+            }
+        }
+    )+)
+}
+
+pub(self) use parse;

@@ -1,7 +1,7 @@
 mod param;
-pub use param::ParamKeys;
+pub use param::{FromParam, ParamRejection};
 
-use super::{Body, Headers, Method, Uri, Version};
+use super::{Body, ByteStr, Headers, Method, Uri, Version};
 use crate::state::AppState;
 
 #[derive(Default)]
@@ -22,7 +22,7 @@ pub struct Request {
     pub body: Body,
 
     // Route Parameters
-    pub(crate) params: Vec<(String, String)>,
+    pub(crate) params: Vec<(ByteStr, ByteStr)>,
 
     // Application state
     pub(crate) state: Option<AppState>,
